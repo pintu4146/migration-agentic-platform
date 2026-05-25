@@ -53,9 +53,13 @@ class Settings(BaseSettings):
     langchain_project: str = Field(default="migration-copilot-poc", description="LangSmith project name")
     langchain_endpoint: str = Field(default="https://api.smith.langchain.com", description="LangSmith endpoint")
     
-    # MCP Connector
-    mcp_base_url: Optional[str] = Field(default=None, description="MCP/Confluence base URL")
-    mcp_bearer_token: Optional[str] = Field(default=None, description="MCP bearer token")
+    # MCP Connector (IBM Context Studio Gateway)
+    mcp_gateway_url: Optional[str] = Field(
+        default=None,
+        description="MCP Gateway URL (e.g., https://servicesessentials.ibm.com/mcp-gateway/...)"
+    )
+    mcp_gateway_token: Optional[str] = Field(default=None, description="MCP Gateway Bearer token")
+    mcp_api_key: Optional[str] = Field(default=None, description="Context Studio API key (x-api-key)")
     mcp_timeout: int = Field(default=30, description="MCP timeout in seconds")
     mcp_max_retries: int = Field(default=3, description="MCP max retries")
     mcp_rate_limit_per_minute: int = Field(default=60, description="MCP rate limit per minute")
