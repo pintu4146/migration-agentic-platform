@@ -45,6 +45,13 @@ try:
     print("\n[OK] Testing FastAPI app...")
     from app.main import app
     
+    print("\n[OK] Testing MCP module...")
+    from app.mcp import MCPConnector, RetrievalProfile, ProfileType
+    from app.mcp.models import Document, ContextPack
+    
+    print("\n[OK] Testing MCP API routes...")
+    from app.api.mcp import router
+    
     print("\n" + "="*50)
     print("SUCCESS: All imports successful!")
     print("="*50)

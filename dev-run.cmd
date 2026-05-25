@@ -6,7 +6,7 @@ REM
 REM This script starts the development server for the Migration Copilot POC.
 REM It will be updated as we progress through implementation phases.
 REM
-REM Current Phase: Phase 1 - Foundation
+REM Current Phase: Phase 2 - MCP Connector
 REM ============================================================================
 
 echo.
@@ -14,7 +14,15 @@ echo ===========================================================================
 echo Migration Copilot - Development Server
 echo ============================================================================
 echo.
-echo Current Phase: Phase 1 - Foundation
+echo Current Phase: Phase 2 - MCP Connector
+echo.
+echo Implemented Features:
+echo   [x] Phase 1: Foundation (Config, Providers, Tracing)
+echo   [x] Phase 2: MCP Connector (Context Retrieval)
+echo   [ ] Phase 3: LangGraph Orchestration
+echo   [ ] Phase 4: Core Agents
+echo   [ ] Phase 5: Intake and Review
+echo   [ ] Phase 6: Migration Planning
 echo.
 
 REM Check if virtual environment exists

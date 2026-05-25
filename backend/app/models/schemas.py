@@ -317,4 +317,25 @@ class AgentExecutionResponse(BaseModel):
         }
     })
 
+
+# ============================================================================
+# MCP Health Check Schema
+# ============================================================================
+
+class MCPHealthResponse(BaseModel):
+    """MCP Gateway health check response"""
+    gateway_url: str
+    status: str
+    last_check: Optional[datetime] = None
+    error: Optional[str] = None
+    
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "gateway_url": "https://servicesessentials.ibm.com/mcp-gateway/...",
+            "status": "healthy",
+            "last_check": "2024-01-01T00:00:00Z",
+            "error": None
+        }
+    })
+
 # Made with Bob

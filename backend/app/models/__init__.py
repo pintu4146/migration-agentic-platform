@@ -10,6 +10,9 @@ from .schemas import (
     ProjectCreateRequest,
     ProjectResponse,
     StateResponse,
+    MCPRetrievalRequest,
+    MCPRetrievalResponse,
+    MCPHealthResponse,
 )
 
 __all__ = [
@@ -20,6 +23,9 @@ __all__ = [
     "ProjectCreateRequest",
     "ProjectResponse",
     "StateResponse",
+    "MCPRetrievalRequest",
+    "MCPRetrievalResponse",
+    "MCPHealthResponse",
 ]
 
 # Made with Bob
