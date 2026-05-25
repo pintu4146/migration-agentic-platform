@@ -100,17 +100,35 @@ async def retrieve_context(
     Retrieve context from MCP Gateway using a retrieval profile.
     
     The profile defines what content to retrieve and how to filter it.
+    
+    NOTE: project_id must be a valid Context Studio context ID (e.g., ctx_b4043773b9c6).
+    If an invalid ID is provided, it will be auto-corrected to the default context ID.
     """
     try:
-        logger.info(f"Retrieving context for project {request.project_id}")
+        # Validate and correct project_id
+        project_id = request.project_id
+        
+        # Check if project_id is a valid context ID (starts with "ctx_")
+        if not project_id.startswith("ctx_"):
+            from ..config import settings
+            default_ctx = settings.default_context_id
+            logger.warning(
+                f"Invalid project_id '{project_id}' provided. "
+                f"Auto-correcting to default context ID: {default_ctx}. "
+                f"Please use a valid Context Studio context ID (format: ctx_xxxxx)"
+            )
+            project_id = default_ctx
+        
+        logger.info(f"Retrieving context for project {project_id}")
         
         # Convert profile dict to RetrievalProfile
         profile = RetrievalProfile(**request.profile.model_dump())
         
-        # Retrieve context
+        # Retrieve context with query
         context_pack = await connector.retrieve(
             profile=profile,
-            project_id=request.project_id
+            project_id=project_id,
+            query=request.query or ""
         )
         
         # Convert to response format

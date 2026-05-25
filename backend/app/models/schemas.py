@@ -238,6 +238,10 @@ class MCPRetrievalRequest(BaseModel):
     """Request to retrieve context from MCP"""
     project_id: str
     profile: MCPRetrievalProfile
+    query: Optional[str] = Field(
+        default=None,
+        description="Optional search query for context retrieval"
+    )
     
     model_config = ConfigDict(json_schema_extra={
         "example": {
@@ -246,7 +250,8 @@ class MCPRetrievalRequest(BaseModel):
                 "profile_name": "extraction_profile",
                 "source_types": ["page"],
                 "max_results": 50
-            }
+            },
+            "query": "application architecture"
         }
     })
 

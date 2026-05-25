@@ -84,6 +84,10 @@ class MCPConnector:
     
     def _get_headers(self) -> Dict[str, str]:
         """Get HTTP headers for MCP requests"""
+        # These are validated in __init__, so they're guaranteed to be non-None
+        assert self.gateway_token is not None
+        assert self.api_key is not None
+        
         return {
             "Authorization": f"Bearer {self.gateway_token}",
             "x-api-key": self.api_key,
@@ -148,6 +152,7 @@ class MCPConnector:
         self,
         profile: RetrievalProfile,
         project_id: str,
+        query: Optional[str] = None,
         additional_filters: Optional[Dict[str, Any]] = None
     ) -> ContextPack:
         """
@@ -156,6 +161,7 @@ class MCPConnector:
         Args:
             profile: Retrieval profile configuration
             project_id: Project identifier
+            query: Optional search query string
             additional_filters: Optional additional filters
             
         Returns:
@@ -167,21 +173,41 @@ class MCPConnector:
         logger.info(f"Retrieving context for project {project_id} with profile {profile.profile_name}")
         
         try:
-            # Build query parameters
-            query_params = self._build_query_params(profile, additional_filters)
+            # Validated in __init__, guaranteed to be non-None
+            gateway_url = self.gateway_url
+            if gateway_url is None:
+                raise ValueError("Gateway URL not configured")
             
-            # Make request to MCP Gateway
-            response = await self._make_request(
-                method="POST",
-                endpoint="/search",
-                json=query_params
+            # Build MCP JSON-RPC request for resources/list
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "resources/list",
+                "params": {}
+            }
+            
+            # Make request to MCP Gateway using JSON-RPC
+            response = await self.client.post(
+                gateway_url,
+                json=payload,
+                headers=self._get_headers()
             )
+            response.raise_for_status()
             
-            # Parse response
+            # Parse JSON-RPC response
             response_data = response.json()
             
-            # Normalize documents
-            documents = self._normalize_documents(response_data, profile)
+            # Check for JSON-RPC error
+            if "error" in response_data:
+                error_msg = response_data["error"].get("message", "Unknown error")
+                raise MCPError(message=f"MCP error: {error_msg}")
+            
+            # Extract resources from result
+            result = response_data.get("result", {})
+            resources = result.get("resources", [])
+            
+            # Normalize documents from resources
+            documents = self._normalize_resources(resources, profile, query)
             
             # Create context pack
             context_pack = ContextPack(
@@ -192,9 +218,11 @@ class MCPConnector:
                 retrieved_at=datetime.utcnow(),
                 cache_key=self._generate_cache_key(project_id, profile),
                 metadata={
-                    "query_params": query_params,
+                    "query": query or "",
+                    "resource_count": len(resources),
                     "response_time_ms": response.elapsed.total_seconds() * 1000,
-                    "profile_type": profile.profile_type
+                    "profile_type": profile.profile_type,
+                    "mcp_method": "resources/list"
                 }
             )
             
@@ -210,13 +238,18 @@ class MCPConnector:
     def _build_query_params(
         self,
         profile: RetrievalProfile,
+        query: Optional[str] = None,
         additional_filters: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Build query parameters from profile"""
+        """Build query parameters from profile and optional query string"""
         params: Dict[str, Any] = {
             "max_results": profile.max_results,
             "include_metadata": profile.include_metadata
         }
+        
+        # Add query string if provided
+        if query:
+            params["query"] = query
         
         # Source types
         if profile.source_types:
@@ -260,6 +293,62 @@ class MCPConnector:
             params.update(additional_filters)
         
         return params
+    
+    def _normalize_resources(
+        self,
+        resources: List[Dict[str, Any]],
+        profile: RetrievalProfile,
+        query: Optional[str] = None
+    ) -> List[Document]:
+        """
+        Normalize MCP resources into Document objects.
+        
+        Args:
+            resources: List of MCP resources
+            profile: Retrieval profile used
+            query: Optional search query for filtering
+            
+        Returns:
+            List of normalized Document objects
+        """
+        documents: List[Document] = []
+        
+        for idx, resource in enumerate(resources):
+            try:
+                # Extract resource data
+                uri = resource.get("uri", "")
+                name = resource.get("name", f"Resource {idx}")
+                description = resource.get("description", "")
+                mime_type = resource.get("mimeType", "text/plain")
+                
+                # Skip if query provided and name doesn't match
+                if query and query.lower() not in name.lower() and query.lower() not in description.lower():
+                    continue
+                
+                # Create document
+                doc = Document(
+                    id=uri or f"resource_{idx}",
+                    source=DocumentSource.CONTEXT_STUDIO,
+                    type=DocumentType.PAGE,
+                    title=name,
+                    content=description,
+                    metadata=DocumentMetadata(
+                        source_id=uri,
+                        source_url=uri,
+                        mime_type=mime_type,
+                        word_count=len(description.split())
+                    ),
+                    evidence_refs=[uri] if uri else [],
+                    confidence=1.0,
+                    extracted_at=datetime.utcnow()
+                )
+                documents.append(doc)
+                
+            except Exception as e:
+                logger.warning(f"Failed to normalize resource {idx}: {str(e)}")
+                continue
+        
+        return documents
     
     def _normalize_documents(
         self,
@@ -418,14 +507,52 @@ class MCPConnector:
     
     async def health_check(self) -> bool:
         """
-        Check MCP Gateway health.
+        Check MCP Gateway health using MCP initialize method.
         
         Returns:
             True if healthy, False otherwise
         """
         try:
-            response = await self._make_request("GET", "/health")
-            return response.status_code == 200
+            # Validated in __init__, guaranteed to be non-None
+            gateway_url = self.gateway_url
+            if gateway_url is None:
+                raise ValueError("Gateway URL not configured")
+            
+            # Use MCP initialize method for health check
+            payload = {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {
+                        "name": "migration-copilot",
+                        "version": "1.0.0"
+                    }
+                }
+            }
+            
+            response = await self.client.post(
+                gateway_url,
+                json=payload,
+                headers=self._get_headers()
+            )
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            # Check for valid JSON-RPC response
+            if "result" in data:
+                logger.info("MCP Gateway health check passed")
+                return True
+            elif "error" in data:
+                logger.warning(f"MCP Gateway returned error: {data['error']}")
+                return False
+            else:
+                logger.warning("MCP Gateway returned unexpected response")
+                return False
+                
         except Exception as e:
             logger.error(f"MCP health check failed: {str(e)}")
             return False

@@ -63,6 +63,10 @@ class Settings(BaseSettings):
     mcp_timeout: int = Field(default=30, description="MCP timeout in seconds")
     mcp_max_retries: int = Field(default=3, description="MCP max retries")
     mcp_rate_limit_per_minute: int = Field(default=60, description="MCP rate limit per minute")
+    default_context_id: str = Field(
+        default="ctx_b4043773b9c6",
+        description="Default Context ID (extracted from MCP_API_KEY JWT token)"
+    )
     
     # Redis Cache
     redis_host: str = Field(default="localhost", description="Redis host")
