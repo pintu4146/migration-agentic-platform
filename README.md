@@ -1,344 +1,334 @@
-# Migration Agent Orchestration POC
+# Migration Copilot - Enterprise Application Modernization POC
 
-Enterprise Application Modernization Copilot - A LangGraph-based multi-agent orchestration system for automated migration planning.
+A proof-of-concept AI-powered copilot for enterprise application modernization, featuring multi-agent orchestration, configurable context retrieval, and transparent execution tracing.
 
-## Overview
+## 🎯 Overview
 
-This POC implements an intelligent agent orchestration system that automates the application migration planning process by:
-
+The Migration Copilot assists with:
 - Ingesting Confluence pages and uploaded documents
 - Fetching context using configurable MCP connectors
-- Extracting migration-relevant facts with confidence scoring
-- Generating questionnaire gaps for missing information
-- Drafting comprehensive intake documents
-- Supporting human review and approval workflows
+- Extracting migration-relevant facts
+- Generating questionnaire gaps
+- Drafting intake documents
+- Supporting human review workflows
 - Generating migration plans with cloud infrastructure recommendations
-- Providing transparent execution traces using LangSmith
+- Providing transparent traces using LangSmith
 
-## Architecture
+## 🏗️ Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Application Layer                         │
-│              FastAPI + LangGraph + Agents                    │
-└────────┬────────────────────────────┬────────────────────────┘
-         │                            │
-         │                            │
-    ┌────▼─────────┐          ┌──────▼──────────┐
-    │  LangSmith   │          │  Prometheus     │
-    │  (LLM Trace) │          │  (Metrics)      │
-    └──────────────┘          └──────┬──────────┘
-                                     │
-                              ┌──────▼──────────┐
-                              │    Grafana      │
-                              │  (Dashboard)    │
-                              └─────────────────┘
-```
+### Tech Stack
 
-## Tech Stack
+**Frontend:**
+- React
+- IBM Carbon Design System
 
-### Backend
-- **FastAPI**: REST API framework
-- **LangGraph**: Multi-agent workflow orchestration
-- **LangSmith**: LLM tracing and observability
-- **OpenAI + Gemini**: LLM providers with automatic fallback
-- **Redis**: Caching and state persistence
-- **Qdrant**: Vector store for semantic search
+**Backend:**
+- FastAPI
+- Python 3.11+
 
-### Frontend
-- **React**: UI framework
-- **IBM Carbon Design System**: Enterprise UI components
+**Agent Orchestration:**
+- LangGraph (supervisor-led multi-agent workflow)
+- Transactional state management with ACID properties
 
-### Infrastructure
-- **Podman**: Container runtime
-- **Prometheus**: Metrics collection
-- **Grafana**: Visualization and dashboards
+**LLM Providers:**
+- OpenAI (primary)
+- Google Gemini (fallback)
+- Provider abstraction layer with circuit breaker pattern
 
-## Key Features
+**Context Sources:**
+- MCP connector (Confluence Cloud)
+- Document parsing (PDF, DOCX, Excel)
 
-### 1. Transactional State Management
-- Optimistic locking with version control
-- Write-ahead logging (changelog)
-- Atomic state updates
-- Rollback capability
+**Storage:**
+- Redis (caching)
+- Qdrant (vector storage)
 
-### 2. Multi-Agent Orchestration
-- **Supervisor Agent**: Workflow routing and control
-- **Context Retrieval Agent**: Document fetching and normalization
-- **Extraction Agent**: Technical fact extraction with confidence scoring
-- **Questionnaire Agent**: Gap identification and question generation
-- **Intake Draft Agent**: Document synthesis and generation
-- **Review Agent**: Quality validation and contradiction detection
-- **Migration Planning Agent**: Strategy and cloud recommendations
+**Observability:**
+- LangSmith (tracing)
+- Prometheus + Grafana (metrics)
 
-### 3. Human-in-the-Loop
-- Review checkpoints before critical decisions
-- State updates during workflow pause
-- Approval workflows with audit trails
+**Container Runtime:**
+- Podman
 
-### 4. Complete Observability
-- LangSmith tracing for all LLM calls and agent decisions
-- Prometheus metrics for system performance
-- Grafana dashboards for unified monitoring
-- Cost tracking and optimization
-
-### 5. Plug-and-Play Architecture
-- Configurable MCP connectors (Confluence Cloud)
-- Provider abstraction (OpenAI/Gemini with fallback)
-- Retrieval profiles for different agent needs
-- No hardcoded dependencies
-
-## Project Structure
+## 📁 Project Structure
 
 ```
 mig-26/
-├── .agents/
-│   └── langgraph-skills/
-│       ├── fastapi-skill/
-│       └── langgraph-skill/
-├── docs/
+├── docs/                           # Comprehensive documentation
 │   ├── 00-architecture-overview.md
 │   ├── 01-phase1-foundation.md
+│   ├── 02-phase2-mcp-connector.md
 │   ├── 03-phase3-orchestration.md
+│   ├── 04-phase4-core-agents.md
+│   ├── 05-phase5-intake-review.md
+│   ├── 06-phase6-migration-planning.md
+│   ├── 07-phase7-frontend-ui.md
+│   ├── 08-phase8-deployment.md
 │   ├── 09-single-point-of-failure-analysis.md
-│   ├── 11-observability-stack.md
-│   ├── 12-agent-orchestration-analysis.md
-│   └── 13-langsmith-tracing-setup.md
-├── backend/                    # (To be implemented)
+│   ├── 10-agent-orchestration-analysis.md
+│   └── 11-observability-stack.md
+│
+├── backend/                        # FastAPI backend
 │   ├── app/
-│   │   ├── main.py
-│   │   ├── config.py
-│   │   ├── providers/
-│   │   ├── orchestration/
-│   │   ├── agents/
-│   │   ├── mcp/
-│   │   └── tracing/
+│   │   ├── __init__.py
+│   │   ├── main.py                # FastAPI application
+│   │   ├── config.py              # Configuration management
+│   │   ├── logging_config.py      # Structured logging
+│   │   ├── models/                # Pydantic schemas
+│   │   ├── providers/             # LLM provider abstraction
+│   │   │   ├── base.py
+│   │   │   ├── openai_provider.py
+│   │   │   ├── gemini_provider.py
+│   │   │   └── factory.py
+│   │   └── tracing/               # LangSmith integration
+│   │       └── langsmith.py
+│   ├── tests/                     # Test suite
 │   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/                   # (To be implemented)
-│   ├── src/
-│   ├── package.json
-│   └── Dockerfile
-├── monitoring/                 # (To be implemented)
-│   ├── prometheus.yml
-│   └── grafana/
-├── .gitignore
-├── README.md
-└── podman-compose.yml         # (To be implemented)
+│   ├── requirements-dev.txt
+│   ├── Dockerfile
+│   └── .env.example
+│
+├── frontend/                       # React frontend (Phase 7)
+│
+├── podman-compose.yml             # Container orchestration
+├── .env.example                   # Environment template
+└── README.md
 ```
 
-## Documentation
-
-### Core Documentation
-
-1. **[Architecture Overview](docs/00-architecture-overview.md)** - System architecture and design principles
-2. **[Agent Orchestration Analysis](docs/12-agent-orchestration-analysis.md)** - Deep-dive into agent design, prompts, and decision-making
-3. **[SPOF Analysis](docs/09-single-point-of-failure-analysis.md)** - Single point of failure mitigation strategies
-4. **[Observability Stack](docs/11-observability-stack.md)** - Complete monitoring setup (LangSmith + Prometheus + Grafana)
-5. **[LangSmith Tracing Setup](docs/13-langsmith-tracing-setup.md)** - LangSmith configuration and usage guide
-
-### Implementation Phases
-
-1. **[Phase 1: Foundation](docs/01-phase1-foundation.md)** - Project skeleton, FastAPI backend, provider abstraction, LangSmith setup
-2. **[Phase 2: MCP Connector](docs/02-phase2-mcp-connector.md)** - Configurable MCP connector, document parsing, vector store, context normalization
-3. **[Phase 3: Orchestration](docs/03-phase3-orchestration.md)** - LangGraph workflow, transactional state management, checkpointing
-4. **[Phase 4: Core Agents](docs/04-phase4-core-agents.md)** - Context Retrieval, Extraction, and Questionnaire agents
-5. **[Phase 5: Intake & Review](docs/05-phase5-intake-review.md)** - Intake Draft and Review agents with human-in-the-loop
-6. **[Phase 6: Migration Planning](docs/06-phase6-migration-planning.md)** - Migration Planning agent with cloud recommendations
-7. **[Phase 7: Frontend UI](docs/07-phase7-frontend-ui.md)** - React application with IBM Carbon Design System
-8. **[Phase 8: Testing & Demo](docs/08-phase8-testing-demo.md)** - Integration testing, performance testing, and demo preparation
-
-### Skills
-
-- **[FastAPI Skill](.agents/langgraph-skills/fastapi-skill/SKILL.md)** - FastAPI best practices
-- **[LangGraph Skill](.agents/langgraph-skills/langgraph-skill/SKILL.md)** - LangGraph patterns and conventions
-
-## Getting Started
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.11+
-- Node.js 18+
-- Podman or Docker
+- Python 3.10+
+- Podman or Docker (optional, for containerized deployment)
 - OpenAI API key
-- Google Gemini API key
-- LangSmith API key
-- Confluence Cloud access
+- (Optional) Google Gemini API key
+- (Optional) LangSmith API key
+- (Optional) Confluence Cloud access
 
-### Environment Setup
+### Option 1: Quick Start (Windows)
 
-1. Clone the repository:
-```bash
-git clone https://github.ibm.com/poc-org-bob/migration-agent-orchestartion.git
-cd migration-agent-orchestartion
+**First Time Setup:**
+```cmd
+# Run setup script (one-time)
+dev-setup.cmd
+
+# Edit backend\.env and add your API keys
+notepad backend\.env
 ```
 
-2. Create `.env` file:
+**Start Development Server:**
+```cmd
+# Run this every time you want to start the server
+dev-run.cmd
+```
+
+The server will be available at:
+- API: http://localhost:8000
+- Docs: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+### Option 2: Manual Setup (All Platforms)
+
+**1. Clone and Setup**
 ```bash
+# Clone repository
+git clone <repository-url>
+cd mig-26
+
+# Copy environment template
+cp backend/.env.example backend/.env
+
+# Edit .env with your API keys
+```
+
+**2. Backend Setup**
+```bash
+cd backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+# Windows:
+venv\Scripts\activate
+# Linux/Mac:
+source venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run import test
+python test_imports.py
+
+# Start development server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 3. Container Setup (Podman)
+
+```bash
+# Build and start all services
+podman-compose up -d
+
+# View logs
+podman-compose logs -f backend
+
+# Stop services
+podman-compose down
+```
+
+### 4. Verify Installation
+
+```bash
+# Check API health
+curl http://localhost:8000/health
+
+# Check provider health
+curl http://localhost:8000/health/providers
+
+# View API documentation
+open http://localhost:8000/docs
+```
+
+## 🔧 Configuration
+
+### Environment Variables
+
+Key configuration options (see `.env.example` for full list):
+
+```bash
+# Application
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+
 # LLM Providers
 PRIMARY_PROVIDER=openai
 FALLBACK_PROVIDER=gemini
-OPENAI_API_KEY=your-openai-key
-GEMINI_API_KEY=your-gemini-key
+OPENAI_API_KEY=your-key
+GEMINI_API_KEY=your-key
 
-# LangSmith
-LANGSMITH_API_KEY=your-langsmith-key
-LANGSMITH_PROJECT=migration-copilot-poc
-LANGSMITH_TRACING=true
+# LangSmith Tracing
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your-key
+LANGCHAIN_PROJECT=migration-copilot-poc
 
-# MCP/Confluence
-CONFLUENCE_URL=https://your-instance.atlassian.net
-CONFLUENCE_USERNAME=your-email@company.com
-CONFLUENCE_API_TOKEN=your-confluence-token
+# MCP Connector
+MCP_BASE_URL=https://your-domain.atlassian.net/wiki
+MCP_BEARER_TOKEN=your-token
 ```
 
-3. Start services (when implemented):
+## 📊 Agent Architecture
+
+### Supervisor-Led Workflow
+
+The system uses a **supervisor-led LangGraph workflow** with 7 specialized agents:
+
+1. **Orchestrator/Supervisor** - Controls workflow and state transitions
+2. **Context Retrieval Agent** - Fetches context from MCP
+3. **Extraction Agent** - Extracts technical facts
+4. **Questionnaire Agent** - Identifies gaps and generates questions
+5. **Intake Draft Agent** - Creates structured intake document
+6. **Review/Validation Agent** - Validates completeness and consistency
+7. **Migration Planning Agent** - Generates migration strategy and plan
+
+### State Management
+
+**Transactional ACID Properties:**
+- **Atomicity**: All-or-nothing commits with exclusive locks
+- **Consistency**: Schema validation and phase transition rules
+- **Isolation**: Single writer lock with optimistic locking
+- **Durability**: Checkpoints and write-ahead logging
+
+## 🧪 Testing
+
 ```bash
-podman-compose up -d
+cd backend
+
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=app --cov-report=html
+
+# Run specific test file
+pytest tests/test_config.py
+
+# Run with markers
+pytest -m unit
+pytest -m integration
 ```
 
-4. Access services:
-- Backend API: http://localhost:8000
-- Frontend UI: http://localhost:3000
-- Prometheus: http://localhost:9090
-- Grafana: http://localhost:3001
-- LangSmith: https://smith.langchain.com
+## 📈 Observability
 
-## Development Phases
+### LangSmith Tracing
 
-### ✅ Phase 0: Planning (Complete)
-- Architecture design
-- Agent orchestration analysis
-- Observability strategy
-- Documentation
+Every operation is traced:
+- MCP requests
+- LLM calls
+- Agent executions
+- State transitions
+- Validation steps
 
-### 🔄 Phase 1: Foundation (Next)
-- Project skeleton
-- FastAPI backend
-- Provider abstraction
-- LangSmith integration
-- Podman setup
+Access traces at: https://smith.langchain.com
 
-### 📋 Phase 2: MCP Connector
-- Confluence Cloud integration
-- Document parsing
-- Vector store setup
-- Context normalization
+### Metrics (Future)
 
-### 📋 Phase 3: Orchestration
-- LangGraph workflow
-- Transactional state manager
-- Checkpointing
-- Error handling
+Prometheus metrics exposed at `/metrics`:
+- Request latency
+- Provider health
+- Token usage
+- Error rates
 
-### 📋 Phase 4: Core Agents
-- Context Retrieval Agent
-- Extraction Agent
-- Questionnaire Agent
+## 🔐 Security
 
-### 📋 Phase 5: Intake & Review
-- Intake Draft Agent
-- Review/Validation Agent
-- Human review UI
-
-### 📋 Phase 6: Migration Planning
-- Migration Planning Agent
-- Final validation
-- Output generation
-
-### 📋 Phase 7: Frontend UI
-- React application
-- IBM Carbon components
-- Dashboard and viewers
-
-### 📋 Phase 8: Testing
-- Integration tests
-- Demo preparation
-- Documentation
-
-## Key Design Decisions
-
-### 1. Supervisor Pattern
-- Centralized workflow control
-- Deterministic routing
-- No direct agent-to-agent communication
-
-### 2. Transactional State
-- Optimistic locking prevents concurrent writes
-- Version-based conflict detection
-- Write-ahead logging for audit trail
-
-### 3. Provider Abstraction
-- OpenAI as primary, Gemini as fallback
-- Circuit breaker pattern
-- Automatic failover
-
-### 4. Caching Strategy
-- LLM response caching (90% cost reduction)
-- MCP context caching (10-20x faster)
-- Embedding caching (instant retrieval)
-
-### 5. Hybrid Validation
-- Rule-based checks for obvious issues
-- LLM-based checks for semantic issues
-- Best cost/quality balance
-
-## Cost Optimization
-
-- **Caching**: 90% cost reduction on repeated queries
-- **Batch Processing**: Combine documents in single calls
-- **Model Selection**: Cheaper models for simple tasks
-- **Prompt Optimization**: Shorter, focused prompts
-- **Structured Output**: JSON mode reduces tokens
-
-## Monitoring
-
-### Metrics Tracked
-- LLM request rate and latency
-- Cache hit/miss rates
-- Token usage and costs
-- Workflow execution times
-- State transaction success rates
-- System resources (CPU, memory)
-
-### Alerts
-- High LLM error rate
-- Low cache hit rate
-- High LLM cost
-- State transaction failures
-- Slow workflow phases
-
-## Security
-
-- API keys in environment variables
-- Bearer token authentication for MCP
-- No persistent storage of sensitive data (POC)
-- Complete audit trail via changelog
+- Non-root container user
+- API key validation
+- CORS configuration
 - Input validation with Pydantic
+- Rate limiting (future)
 
-## Contributing
+## 📝 Development Phases
 
-This is a POC project. For contributions:
+- ✅ **Phase 1**: Foundation (Configuration, Providers, Tracing)
+- 🚧 **Phase 2**: MCP Connector
+- 🚧 **Phase 3**: LangGraph Orchestration
+- 🚧 **Phase 4**: Core Agents
+- 🚧 **Phase 5**: Intake & Review
+- 🚧 **Phase 6**: Migration Planning
+- 🚧 **Phase 7**: Frontend UI
+- 🚧 **Phase 8**: Deployment & Observability
 
-1. Follow the documented architecture
-2. Use the provided skills for FastAPI and LangGraph
-3. Maintain transactional state management patterns
-4. Add LangSmith tracing for new operations
-5. Update documentation
+## 🤝 Contributing
 
-## License
+This is a POC project. For production use:
+1. Add authentication/authorization
+2. Implement rate limiting
+3. Add comprehensive error handling
+4. Set up CI/CD pipelines
+5. Add monitoring and alerting
+6. Implement data persistence
+7. Add audit logging
 
-IBM Internal POC - Proprietary
+## 📄 License
 
-## Contact
+[Your License Here]
 
-- **Project**: Migration Agent Orchestration POC
-- **Organization**: poc-org-bob
-- **Repository**: https://github.ibm.com/poc-org-bob/migration-agent-orchestartion
+## 🆘 Support
 
-## Acknowledgments
+For issues and questions:
+- Check documentation in `docs/`
+- Review API docs at `/docs`
+- Check LangSmith traces for debugging
 
-- LangChain/LangGraph for orchestration framework
-- IBM Carbon Design System for UI components
-- OpenAI and Google for LLM capabilities
-- LangSmith for observability platform
+## 🎯 Success Criteria
+
+The POC is successful if:
+- ✅ MCP retrieval is configurable and plug-and-play
+- ✅ Agents can request different context slices through profiles
+- ✅ State transitions are deterministic and traceable
+- ✅ Shared state updates are transaction-like and safe
+- ✅ LangSmith clearly shows workflow execution
+- ✅ Intake draft can be created and reviewed
+- ✅ Migration plan can be generated from reviewed intake
+- ✅ UI and backend feel coherent and demo-ready
