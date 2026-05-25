@@ -17,7 +17,7 @@ from .config import settings
 from .logging_config import setup_logging
 from .tracing.langsmith import setup_langsmith
 from .providers.factory import ProviderFactory
-from .api import mcp_router
+from .api import mcp_router, orchestration_router
 from .models.schemas import (
     HealthResponse,
     ProviderHealthResponse,
@@ -97,6 +97,7 @@ app.add_middleware(
 
 # Include API routers
 app.include_router(mcp_router)
+app.include_router(orchestration_router)
 
 
 # ============================================================================
