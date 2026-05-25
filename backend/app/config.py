@@ -80,6 +80,22 @@ class Settings(BaseSettings):
     qdrant_port: int = Field(default=6333, description="Qdrant port")
     qdrant_collection: str = Field(default="migration_docs", description="Qdrant collection name")
     
+    # Document Processing
+    chunk_size: int = Field(default=1000, description="Document chunk size in characters")
+    chunk_overlap: int = Field(default=200, description="Chunk overlap in characters")
+    max_file_size_mb: int = Field(default=50, description="Maximum file upload size in MB")
+    
+    # Provider Selection
+    @property
+    def default_provider(self) -> str:
+        """Get the default provider based on configuration."""
+        if self.openai_api_key:
+            return self.primary_provider
+        elif self.gemini_api_key:
+            return "gemini"
+        else:
+            raise ValueError("No LLM provider configured")
+    
     # Logging
     log_level: str = Field(default="INFO", description="Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL")
     log_format: str = Field(default="json", description="Log format: json or text")

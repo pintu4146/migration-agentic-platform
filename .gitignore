@@ -211,4 +211,15 @@ prometheus_data/
 # Grafana
 grafana_data/
 
+# Generated documents and test files
+backend/uploads/
+backend/cache/
+backend/MULTI_PROJECT_ARCHITECTURE.md
+backend/TESTING_GUIDE.md
+backend/RESET_DATA.md
+backend/WHICH_SCRIPT_TO_USE.md
+backend/CONTAINER_SETUP.md
+test_*.py
+quick_test.ps1
+
 # Made with Bob
