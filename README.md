@@ -129,15 +129,24 @@ mig-26/
 
 ## Documentation
 
-### Planning Documents
+### Core Documentation
 
 1. **[Architecture Overview](docs/00-architecture-overview.md)** - System architecture and design principles
-2. **[Phase 1: Foundation](docs/01-phase1-foundation.md)** - Project setup and infrastructure
-3. **[Phase 3: Orchestration](docs/03-phase3-orchestration.md)** - LangGraph workflow and state management
-4. **[SPOF Analysis](docs/09-single-point-of-failure-analysis.md)** - Failure mitigation strategies
-5. **[Observability Stack](docs/11-observability-stack.md)** - Monitoring and tracing setup
-6. **[Agent Analysis](docs/12-agent-orchestration-analysis.md)** - Agent design and trade-offs
-7. **[LangSmith Setup](docs/13-langsmith-tracing-setup.md)** - Tracing configuration guide
+2. **[Agent Orchestration Analysis](docs/12-agent-orchestration-analysis.md)** - Deep-dive into agent design, prompts, and decision-making
+3. **[SPOF Analysis](docs/09-single-point-of-failure-analysis.md)** - Single point of failure mitigation strategies
+4. **[Observability Stack](docs/11-observability-stack.md)** - Complete monitoring setup (LangSmith + Prometheus + Grafana)
+5. **[LangSmith Tracing Setup](docs/13-langsmith-tracing-setup.md)** - LangSmith configuration and usage guide
+
+### Implementation Phases
+
+1. **[Phase 1: Foundation](docs/01-phase1-foundation.md)** - Project skeleton, FastAPI backend, provider abstraction, LangSmith setup
+2. **[Phase 2: MCP Connector](docs/02-phase2-mcp-connector.md)** - Configurable MCP connector, document parsing, vector store, context normalization
+3. **[Phase 3: Orchestration](docs/03-phase3-orchestration.md)** - LangGraph workflow, transactional state management, checkpointing
+4. **[Phase 4: Core Agents](docs/04-phase4-core-agents.md)** - Context Retrieval, Extraction, and Questionnaire agents
+5. **[Phase 5: Intake & Review](docs/05-phase5-intake-review.md)** - Intake Draft and Review agents with human-in-the-loop
+6. **[Phase 6: Migration Planning](docs/06-phase6-migration-planning.md)** - Migration Planning agent with cloud recommendations
+7. **[Phase 7: Frontend UI](docs/07-phase7-frontend-ui.md)** - React application with IBM Carbon Design System
+8. **[Phase 8: Testing & Demo](docs/08-phase8-testing-demo.md)** - Integration testing, performance testing, and demo preparation
 
 ### Skills
 
