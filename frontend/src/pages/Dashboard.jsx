@@ -10,6 +10,7 @@ import {
 } from '@carbon/react';
 import { Upload, Play, DocumentBlank } from '@carbon/icons-react';
 import { checkMCPHealth } from '../services/api';
+import ProjectSelector from '../components/ProjectSelector';
 import './Dashboard.scss';
 
 const Dashboard = () => {
@@ -17,10 +18,21 @@ const Dashboard = () => {
   const [mcpStatus, setMcpStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [selectedProject, setSelectedProject] = useState('');
 
   useEffect(() => {
     checkHealth();
+    // Load last selected project from localStorage
+    const lastProject = localStorage.getItem('lastSelectedProject');
+    if (lastProject) {
+      setSelectedProject(lastProject);
+    }
   }, []);
+
+  const handleProjectChange = (projectId) => {
+    setSelectedProject(projectId);
+    localStorage.setItem('lastSelectedProject', projectId);
+  };
 
   const checkHealth = async () => {
     try {
@@ -59,6 +71,14 @@ const Dashboard = () => {
         <Loading description="Checking system status..." withOverlay={false} />
       ) : (
         <>
+          <div style={{ marginBottom: '2rem', maxWidth: '400px' }}>
+            <ProjectSelector
+              value={selectedProject}
+              onChange={handleProjectChange}
+              label="Select Project for Workflow"
+            />
+          </div>
+
           <Grid className="dashboard-grid">
             <Column lg={4} md={4} sm={4}>
               <Tile className="dashboard-tile">
@@ -92,8 +112,9 @@ const Dashboard = () => {
                 </p>
                 <Button
                   kind="secondary"
-                  onClick={() => navigate('/workflow/test-project')}
+                  onClick={() => navigate(`/workflow/${selectedProject || 'test-project'}`)}
                   style={{ marginTop: '1rem' }}
+                  disabled={!selectedProject}
                 >
                   Start Analysis
                 </Button>
@@ -112,8 +133,9 @@ const Dashboard = () => {
                 </p>
                 <Button
                   kind="tertiary"
-                  onClick={() => navigate('/facts/test-project')}
+                  onClick={() => navigate(`/facts/${selectedProject || 'test-project'}`)}
                   style={{ marginTop: '1rem' }}
+                  disabled={!selectedProject}
                 >
                   View Facts
                 </Button>

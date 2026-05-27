@@ -88,6 +88,22 @@ export const retrieveContext = async (projectId, profile = 'extraction_profile')
   return response.data;
 };
 
+// Projects API
+export const listProjects = async () => {
+  const response = await api.get('/api/projects/list');
+  return response.data;
+};
+
+export const getProject = async (projectId) => {
+  const response = await api.get(`/api/projects/${projectId}`);
+  return response.data;
+};
+
+export const deleteProject = async (projectId) => {
+  const response = await api.delete(`/api/projects/${projectId}`);
+  return response.data;
+};
+
 export default api;
 
 // Made with Bob

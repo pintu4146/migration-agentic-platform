@@ -17,6 +17,7 @@ import {
   executeWorkflow,
   getWorkflowState,
 } from '../services/api';
+import ProjectSelector from '../components/ProjectSelector';
 import './WorkflowExecution.scss';
 
 const WorkflowExecution = () => {
@@ -94,6 +95,10 @@ const WorkflowExecution = () => {
 
   const currentPhaseIndex = state ? getPhaseIndex(state.phase) : 0;
 
+  const handleProjectChange = (newProjectId) => {
+    navigate(`/workflow/${newProjectId}`);
+  };
+
   return (
     <div className="page-container">
       <div className="page-header">
@@ -101,6 +106,14 @@ const WorkflowExecution = () => {
         <p className="page-description">
           Project: <strong>{projectId}</strong>
         </p>
+      </div>
+
+      <div style={{ marginBottom: '2rem', maxWidth: '400px' }}>
+        <ProjectSelector
+          value={projectId}
+          onChange={handleProjectChange}
+          label="Switch Project"
+        />
       </div>
 
       {error && (

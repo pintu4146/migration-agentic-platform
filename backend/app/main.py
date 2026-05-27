@@ -19,6 +19,7 @@ from .tracing.langsmith import setup_langsmith
 from .providers.factory import ProviderFactory
 from .api import mcp_router, orchestration_router
 from .api.documents import router as documents_router
+from .api.projects import router as projects_router
 from .models.schemas import (
     HealthResponse,
     ProviderHealthResponse,
@@ -102,6 +103,7 @@ app.add_middleware(
 app.include_router(mcp_router)
 app.include_router(orchestration_router)
 app.include_router(documents_router)
+app.include_router(projects_router)
 
 
 # ============================================================================
