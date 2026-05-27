@@ -144,8 +144,49 @@ class QdrantStore:
             await self.initialize()
         
         try:
-            # Ensure collection exists
-            await self.create_collection(collection_name)
+            # Detect embedding dimension from first document
+            first_embedding = documents[0].get('embedding')
+            if not first_embedding:
+                raise ValueError("First document missing embedding")
+            
+            vector_size = len(first_embedding)
+            logger.info(f"Detected embedding dimension: {vector_size}")
+            
+            # Check if collection exists
+            collections = self.client.get_collections()
+            existing = [c.name for c in collections.collections]
+            
+            if collection_name in existing:
+                # Collection exists - try to add documents
+                # If dimensions don't match, Qdrant will error and we'll recreate
+                logger.info(f"Collection '{collection_name}' exists, will attempt to add documents")
+                try:
+                    # Try a test upsert to check if dimensions match
+                    test_point = PointStruct(
+                        id="test_dimension_check",
+                        vector=first_embedding,
+                        payload={"test": True}
+                    )
+                    self.client.upsert(
+                        collection_name=collection_name,
+                        points=[test_point]
+                    )
+                    # Delete test point
+                    self.client.delete(
+                        collection_name=collection_name,
+                        points_selector=["test_dimension_check"]
+                    )
+                    logger.info(f"Collection '{collection_name}' has correct dimensions")
+                except Exception as dim_error:
+                    if "dimension" in str(dim_error).lower():
+                        logger.warning(f"Collection '{collection_name}' has wrong dimensions. Recreating...")
+                        self.client.delete_collection(collection_name)
+                        await self.create_collection(collection_name, vector_size=vector_size)
+                    else:
+                        raise
+            else:
+                # Create collection with detected dimensions
+                await self.create_collection(collection_name, vector_size=vector_size)
             
             # Prepare points
             points = []

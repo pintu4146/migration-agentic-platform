@@ -20,7 +20,7 @@ class DocumentChunker:
         self,
         chunk_size: int = 1000,
         overlap: int = 200,
-        min_chunk_size: int = 100
+        min_chunk_size: int = 50
     ):
         """
         Initialize chunker.
@@ -28,7 +28,7 @@ class DocumentChunker:
         Args:
             chunk_size: Target size for each chunk in characters
             overlap: Number of characters to overlap between chunks
-            min_chunk_size: Minimum chunk size to avoid tiny fragments
+            min_chunk_size: Minimum chunk size to avoid tiny fragments (default: 50)
         """
         
         self.chunk_size = chunk_size

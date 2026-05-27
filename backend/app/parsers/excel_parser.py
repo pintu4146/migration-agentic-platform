@@ -76,6 +76,7 @@ class ExcelParser:
             content = "\n\n".join(full_text)
             
             metadata = {
+                "parser": "ExcelParser",
                 "title": file_path.stem,
                 "sheet_count": len(sheet_names),
                 "sheet_names": sheet_names,

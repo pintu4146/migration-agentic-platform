@@ -53,6 +53,7 @@ class DOCXParser:
             # Extract core properties
             core_props = doc.core_properties
             metadata = {
+                "parser": "DOCXParser",
                 "title": core_props.title or file_path.stem,
                 "author": core_props.author,
                 "subject": core_props.subject,

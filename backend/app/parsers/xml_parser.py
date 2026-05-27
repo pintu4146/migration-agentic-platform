@@ -162,6 +162,7 @@ class XMLParser:
         stat = file_path.stat()
         
         return {
+            "parser": "XMLParser",
             "file_name": file_path.name,
             "file_type": "xml",
             "file_size": stat.st_size,

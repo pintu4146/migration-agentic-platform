@@ -287,6 +287,7 @@ class MarkdownParser:
         line_count = len(content.split('\n'))
         
         return {
+            "parser": "MarkdownParser",
             "file_name": file_path.name,
             "file_type": "markdown",
             "file_size": stat.st_size,

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from pydantic import BaseModel
 
 from app.parsers.parser_factory import ParserFactory
@@ -33,6 +33,9 @@ class DocumentUploadResponse(BaseModel):
     file_type: str
     file_size: int
     chunk_count: int
+    chunks_created: int  # Alias for frontend compatibility
+    parser_used: str
+    stored_in: str
     status: str
     message: str
 
@@ -67,7 +70,7 @@ async def get_qdrant_store() -> QdrantStore:
 @router.post("/upload", response_model=DocumentUploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
-    project_id: str = "default",
+    project_id: str = Form("default"),
     qdrant_store: QdrantStore = Depends(get_qdrant_store)
 ):
     """
@@ -102,6 +105,9 @@ async def upload_document(
             logger.info(f"Parsing document: {file.filename}")
             parsed_doc = ParserFactory.parse_file(temp_path)
             
+            # Get parser name from metadata
+            parser_name = parsed_doc.get('metadata', {}).get('parser', 'unknown')
+            
             # Add upload metadata
             parsed_doc['metadata']['uploaded_at'] = datetime.utcnow().isoformat()
             parsed_doc['metadata']['project_id'] = project_id
@@ -116,9 +122,12 @@ async def upload_document(
             chunks = chunker.chunk_document(parsed_doc)
             
             if not chunks:
+                content_length = len(parsed_doc.get('content', ''))
                 raise HTTPException(
                     status_code=400,
-                    detail="Document produced no valid chunks"
+                    detail=f"Document produced no valid chunks. Extracted only {content_length} characters. "
+                           f"This may be an image-based PDF or a document with minimal text content. "
+                           f"Minimum chunk size is {settings.chunk_size} characters."
                 )
             
             # Generate embeddings
@@ -129,10 +138,11 @@ async def upload_document(
             # Store in Qdrant
             logger.info(f"Storing {len(embedded_chunks)} chunks in Qdrant")
             document_id = f"{project_id}_{file.filename}_{datetime.utcnow().timestamp()}"
+            collection_name = f"project_{project_id}"
             
             await qdrant_store.add_documents(
                 documents=embedded_chunks,
-                collection_name=f"project_{project_id}"
+                collection_name=collection_name
             )
             
             return DocumentUploadResponse(
@@ -141,6 +151,9 @@ async def upload_document(
                 file_type=file_extension,
                 file_size=len(content),
                 chunk_count=len(embedded_chunks),
+                chunks_created=len(embedded_chunks),  # For frontend compatibility
+                parser_used=parser_name,
+                stored_in=collection_name,
                 status="success",
                 message=f"Document processed successfully with {len(embedded_chunks)} chunks"
             )

@@ -59,6 +59,7 @@ class TextParser:
             non_empty_lines = [line for line in lines if line.strip()]
             
             metadata = {
+                "parser": "TextParser",
                 "title": file_path.stem,
                 "filename": file_path.name,
                 "extension": file_path.suffix,

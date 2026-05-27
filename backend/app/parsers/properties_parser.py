@@ -232,6 +232,7 @@ class PropertiesParser:
             spring_metadata['active_profiles'] = properties['spring.profiles.active']
         
         return {
+            "parser": "PropertiesParser",
             "file_name": file_path.name,
             "file_type": "properties",
             "file_size": stat.st_size,

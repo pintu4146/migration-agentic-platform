@@ -37,8 +37,11 @@ class EmbeddingGenerator:
     async def _get_provider(self):
         """Get or create provider instance and detect actual provider."""
         if self.provider is None:
-            # Get provider from factory (may return fallback if primary unavailable)
-            from app.providers.factory import provider_factory
+            # Get provider from global factory instance in main.py
+            from app.main import provider_factory
+            
+            if provider_factory is None:
+                raise RuntimeError("Provider factory not initialized. Call app startup first.")
             
             # Check which provider is actually available
             if provider_factory.primary_provider and provider_factory.primary_status.value == "healthy":
@@ -62,7 +65,10 @@ class EmbeddingGenerator:
     
     def _get_genai_client(self):
         """Get or create Google GenAI client for embeddings."""
-        if self._genai_client is None and self.provider_name == 'gemini':
+        # Use actual provider name (after fallback detection)
+        actual_provider = self._get_actual_provider_name()
+        
+        if self._genai_client is None and actual_provider == 'gemini':
             try:
                 from google import genai
             except ImportError:
@@ -70,7 +76,9 @@ class EmbeddingGenerator:
                 raise
             
             # Initialize client with API key from settings
+            logger.info(f"Initializing Gemini client for embeddings with API key: {settings.gemini_api_key[:20]}...")
             self._genai_client = genai.Client(api_key=settings.gemini_api_key)
+            logger.info("Gemini client initialized successfully")
         
         return self._genai_client
     
@@ -128,9 +136,16 @@ class EmbeddingGenerator:
                 )
                 
                 # Extract embedding from response
-                # result.embeddings is a list-like object
+                # result.embeddings is a list of ContentEmbedding objects
+                # We need to get the .values from the first one
                 logger.info(f"Gemini embedding result type: {type(result.embeddings)}")
-                return list(result.embeddings)
+                if hasattr(result.embeddings[0], 'values'):
+                    embedding_values = list(result.embeddings[0].values)
+                    logger.info(f"Extracted {len(embedding_values)} embedding values")
+                    return embedding_values
+                else:
+                    # Fallback if structure is different
+                    return list(result.embeddings[0])
             
             elif actual_provider == 'openai':
                 # Use OpenAI embedding - need to get provider for OpenAI client
@@ -245,8 +260,15 @@ class EmbeddingGenerator:
                 )
                 
                 # Extract embedding from response
+                # result.embeddings is a list of ContentEmbedding objects
                 logger.info(f"Gemini query embedding result type: {type(result.embeddings)}")
-                return list(result.embeddings)
+                if hasattr(result.embeddings[0], 'values'):
+                    embedding_values = list(result.embeddings[0].values)
+                    logger.info(f"Extracted {len(embedding_values)} query embedding values")
+                    return embedding_values
+                else:
+                    # Fallback if structure is different
+                    return list(result.embeddings[0])
             
             elif actual_provider == 'openai':
                 # Use OpenAI embedding - need to get provider for OpenAI client

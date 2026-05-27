@@ -52,6 +52,7 @@ class PDFParser:
             
             # Extract metadata
             metadata = {
+                "parser": "PDFParser",
                 "title": doc.metadata.get("title", file_path.stem),
                 "author": doc.metadata.get("author"),
                 "subject": doc.metadata.get("subject"),
@@ -66,8 +67,9 @@ class PDFParser:
             # Extract text from all pages
             pages = []
             full_text = []
+            page_count = doc.page_count  # Save before closing
             
-            for page_num in range(doc.page_count):
+            for page_num in range(page_count):
                 page = doc[page_num]
                 text = page.get_text()
                 
@@ -79,11 +81,11 @@ class PDFParser:
                 
                 full_text.append(text)
             
-            doc.close()
-            
             content = "\n\n".join(full_text)
             
-            logger.info(f"Extracted {len(content)} characters from {doc.page_count} pages")
+            doc.close()
+            
+            logger.info(f"Extracted {len(content)} characters from {page_count} pages")
             
             return {
                 "content": content,
