@@ -92,8 +92,9 @@ const Dashboard = () => {
                 </p>
                 <Button
                   kind="primary"
-                  onClick={() => navigate('/upload')}
+                  onClick={() => navigate(`/upload?project=${selectedProject || ''}`)}
                   style={{ marginTop: '1rem' }}
+                  disabled={!selectedProject}
                 >
                   Upload Files
                 </Button>

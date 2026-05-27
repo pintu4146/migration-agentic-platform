@@ -9,11 +9,19 @@ from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.storage.qdrant_store import QdrantStore, get_qdrant_store
+from ..storage.qdrant_store import QdrantStore
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/projects", tags=["projects"])
+router = APIRouter(prefix="/api/projects", tags=["projects"])
+
+
+# Dependency: Get Qdrant store
+async def get_qdrant_store() -> QdrantStore:
+    """Get Qdrant store instance."""
+    store = QdrantStore()
+    await store.initialize()
+    return store
 
 
 class ProjectInfo(BaseModel):
@@ -58,12 +66,16 @@ async def list_projects(
                 # Extract project ID from collection name
                 project_id = collection.name.replace("project_", "")
                 
-                # Get collection info for document count
+                # Get document count using count() method to avoid Pydantic validation issues
                 try:
-                    collection_info = qdrant_store.client.get_collection(collection.name)
-                    vector_count = collection_info.vectors_count or 0
+                    # Use count() method which returns the number of points in the collection
+                    count_result = qdrant_store.client.count(
+                        collection_name=collection.name,
+                        exact=True
+                    )
+                    vector_count = count_result.count if count_result else 0
                 except Exception as e:
-                    logger.warning(f"Could not get info for collection {collection.name}: {e}")
+                    logger.warning(f"Could not count documents in collection {collection.name}: {e}")
                     vector_count = 0
                 
                 projects.append(ProjectInfo(

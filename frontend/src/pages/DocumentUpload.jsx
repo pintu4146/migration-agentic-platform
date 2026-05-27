@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   FileUploader,
   TextInput,
@@ -10,14 +11,29 @@ import {
 } from '@carbon/react';
 import { CheckmarkFilled, ErrorFilled } from '@carbon/icons-react';
 import { uploadDocument } from '../services/api';
+import ProjectSelector from '../components/ProjectSelector';
 import './DocumentUpload.scss';
 
 const DocumentUpload = () => {
-  const [projectId, setProjectId] = useState('test-project');
+  const [searchParams] = useSearchParams();
+  const [projectId, setProjectId] = useState('');
   const [files, setFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [uploadResults, setUploadResults] = useState([]);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    // Get project from URL params or localStorage
+    const projectFromUrl = searchParams.get('project');
+    const lastProject = localStorage.getItem('lastSelectedProject');
+    const initialProject = projectFromUrl || lastProject || '';
+    setProjectId(initialProject);
+  }, [searchParams]);
+
+  const handleProjectChange = (newProjectId) => {
+    setProjectId(newProjectId);
+    localStorage.setItem('lastSelectedProject', newProjectId);
+  };
 
   const handleFileChange = (event) => {
     const selectedFiles = Array.from(event.target.files || []);
@@ -90,15 +106,14 @@ const DocumentUpload = () => {
 
       <Tile className="upload-tile">
         <div className="upload-form">
-          <TextInput
-            id="project-id"
-            labelText="Project ID"
-            placeholder="Enter project identifier"
-            value={projectId}
-            onChange={(e) => setProjectId(e.target.value)}
-            disabled={uploading}
-            helperText="Unique identifier for grouping related documents"
-          />
+          <div style={{ marginBottom: '1.5rem' }}>
+            <ProjectSelector
+              value={projectId}
+              onChange={handleProjectChange}
+              label="Select Project"
+              disabled={uploading}
+            />
+          </div>
 
           <FileUploader
             labelTitle="Select files"
