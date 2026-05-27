@@ -1,0 +1,12 @@
+{"mcpServers": {
+    "context-studio": {
+      "type": "streamable-http",
+      "url": "https://servicesessentials.ibm.com/mcp-gateway/service/gateway/servers/8ccdd203bdee4014b08e82eedb6046e2/mcp",
+      "headers": {
+        "Authorization": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzaHJhZGRoYS5wYXJpa2gxQGlibS5jb20iLCJqdGkiOiJiNDc2N2UwYy1jMjI1LTQ1NmEtYWY3My0xNGRmZjQzOTNlMTUiLCJ0b2tlbl91c2UiOiJhcGkiLCJpYXQiOjE3Nzk0NDI2ODYsImlzcyI6Im1jcGdhdGV3YXkiLCJhdWQiOiJtY3BnYXRld2F5LWFwaSIsInVzZXIiOnsiZW1haWwiOiJzaHJhZGRoYS5wYXJpa2gxQGlibS5jb20iLCJmdWxsX25hbWUiOiJBUEkgVG9rZW4gVXNlciIsImlzX2FkbWluIjp0cnVlLCJhdXRoX3Byb3ZpZGVyIjoiYXBpX3Rva2VuIn0sInRlYW1zIjpudWxsLCJzY29wZXMiOnsic2VydmVyX2lkIjoiOGNjZGQyMDNiZGVlNDAxNGIwOGU4MmVlZGI2MDQ2ZTIiLCJwZXJtaXNzaW9ucyI6W10sImlwX3Jlc3RyaWN0aW9ucyI6W10sInRpbWVfcmVzdHJpY3Rpb25zIjp7fX0sImV4cCI6MTc4MDA0NzQ4Nn0.kDgJF9Ezz69fCgMBjfdTvoUl1Nxp7yogU7IQ9VSJfh4",
+        "x-api-key": "eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJlbWFpbEFkZHJlc3MiOiJQaW50dS5LdW1hcjZAaWJtLmNvbSIsInRlYW1JZCI6IjZhMDU3MzczMzEzMDBlZTRlNWMxYWJhOCIsImNvbnRleHRJZCI6ImN0eF9iNDA0Mzc3M2I5YzYiLCJpYXQiOjE3Nzk0NDI2ODYsImV4cCI6MTc4MDA0NzQ4NiwiaXNzIjoiY29udGV4dC1icm9rZXIiLCJ0b2tlbl9pZCI6ImI2MThhNTI1LTlmZGEtNGI5NS1hOTg2LWE2NzNmMGRiZWY1ZiJ9.o9xGFzPeNmTRPX1G2NS8_-Rpy59d27u07XcUfJ6lGLE_cdb38HmASslb_sjiIBZMJLs3I3rarkDNCBV0p1g1PA"
+      },
+      "disabled": false
+    }
+  }
+}

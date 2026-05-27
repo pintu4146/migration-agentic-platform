@@ -17,6 +17,7 @@ class DocumentType(str, Enum):
     ATTACHMENT = "attachment"
     COMMENT = "comment"
     BLOG = "blog"
+    DOCUMENT = "document"  # Added for uploaded documents
     UNKNOWN = "unknown"
 
 
@@ -31,7 +32,7 @@ class DocumentSource(str, Enum):
 class DocumentMetadata(BaseModel):
     """Document metadata"""
     
-    source_id: str = Field(description="Original source document ID")
+    source_id: Optional[str] = Field(default=None, description="Original source document ID")
     source_url: Optional[str] = Field(default=None, description="URL to source document")
     author: Optional[str] = Field(default=None, description="Document author")
     created_at: Optional[datetime] = Field(default=None, description="Creation timestamp")

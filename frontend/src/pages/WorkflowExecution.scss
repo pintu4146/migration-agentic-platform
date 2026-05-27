@@ -1,0 +1,114 @@
+.workflow-tile {
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 3rem 2rem;
+
+  h3 {
+    font-size: 1.5rem;
+    font-weight: 400;
+    margin-bottom: 1rem;
+  }
+
+  p {
+    color: var(--cds-text-secondary);
+    margin-bottom: 2rem;
+  }
+}
+
+.workflow-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--cds-border-subtle);
+
+  .workflow-info {
+    h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    .status-badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+      background: var(--cds-layer-accent);
+      border-radius: 4px;
+      font-size: 0.875rem;
+      color: var(--cds-text-primary);
+
+      strong {
+        font-family: 'IBM Plex Mono', monospace;
+        color: var(--cds-link-primary);
+      }
+    }
+  }
+
+  .workflow-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+}
+
+.cds--progress-indicator {
+  margin: 2rem 0;
+}
+
+.cds--accordion {
+  margin-top: 2rem;
+}
+
+.questions-list {
+  .question-item {
+    padding: 1rem;
+    margin-bottom: 1rem;
+    background: var(--cds-layer-01);
+    border-left: 3px solid var(--cds-border-interactive);
+    border-radius: 4px;
+
+    strong {
+      color: var(--cds-text-primary);
+      margin-right: 0.5rem;
+    }
+
+    .question-meta {
+      margin-top: 0.5rem;
+      font-size: 0.75rem;
+      color: var(--cds-text-secondary);
+      font-family: 'IBM Plex Mono', monospace;
+    }
+  }
+}
+
+.completion-tile {
+  margin-top: 2rem;
+  padding: 2rem;
+  text-align: center;
+  background: var(--cds-layer-accent);
+
+  .completion-icon {
+    color: var(--cds-support-success);
+    margin-bottom: 1rem;
+  }
+
+  h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+    color: var(--cds-text-primary);
+  }
+
+  p {
+    color: var(--cds-text-secondary);
+    margin-bottom: 1.5rem;
+  }
+}
+
+// Made with Bob

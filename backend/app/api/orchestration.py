@@ -242,7 +242,7 @@ async def get_state(project_id: str) -> GetStateResponse:
         HTTPException: If state not found or retrieval fails
     """
     try:
-        state_manager = get_state_manager()
+        state_manager = await get_state_manager()
         state = await state_manager.get_state(project_id)
         
         if state is None:
@@ -286,7 +286,7 @@ async def health_check() -> HealthResponse:
     """
     try:
         orchestrator = get_workflow_orchestrator()
-        state_manager = get_state_manager()
+        state_manager = await get_state_manager()
         
         return HealthResponse(
             status="healthy",

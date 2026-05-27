@@ -24,23 +24,59 @@ class EmbeddingGenerator:
         Initialize embedding generator.
         
         Args:
-            provider_name: Provider to use ('gemini' or 'openai'). 
+            provider_name: Provider to use ('gemini' or 'openai').
                           Defaults to settings.default_provider
         """
         
         self.provider_name = provider_name or settings.default_provider
         self.provider = None
         self._embedding_model = None
+        self._genai_client = None
+        self._actual_provider_name = None  # Track the actual provider being used
     
     async def _get_provider(self):
-        """Get or create provider instance."""
+        """Get or create provider instance and detect actual provider."""
         if self.provider is None:
-            self.provider = await get_provider(self.provider_name)
+            # Get provider from factory (may return fallback if primary unavailable)
+            from app.providers.factory import provider_factory
+            
+            # Check which provider is actually available
+            if provider_factory.primary_provider and provider_factory.primary_status.value == "healthy":
+                self.provider = provider_factory.primary_provider
+                self._actual_provider_name = settings.primary_provider
+                logger.info(f"Using primary provider for embeddings: {self._actual_provider_name}")
+            elif provider_factory.fallback_provider and provider_factory.fallback_status.value == "healthy":
+                self.provider = provider_factory.fallback_provider
+                self._actual_provider_name = settings.fallback_provider
+                logger.info(f"Using fallback provider for embeddings: {self._actual_provider_name}")
+            else:
+                raise RuntimeError("No healthy LLM provider available for embeddings")
+        
         return self.provider
+    
+    def _get_actual_provider_name(self) -> str:
+        """Get the actual provider name being used (after fallback logic)."""
+        if self._actual_provider_name:
+            return self._actual_provider_name
+        return self.provider_name
+    
+    def _get_genai_client(self):
+        """Get or create Google GenAI client for embeddings."""
+        if self._genai_client is None and self.provider_name == 'gemini':
+            try:
+                from google import genai
+            except ImportError:
+                logger.error("google-genai package not installed. Install with: pip install google-genai")
+                raise
+            
+            # Initialize client with API key from settings
+            self._genai_client = genai.Client(api_key=settings.gemini_api_key)
+        
+        return self._genai_client
     
     def _get_embedding_model(self) -> str:
         """
-        Get the embedding model name for the provider.
+        Get the embedding model name for the actual provider being used.
         
         Returns:
             Model name string
@@ -49,14 +85,17 @@ class EmbeddingGenerator:
         if self._embedding_model:
             return self._embedding_model
         
-        if self.provider_name == 'gemini':
-            # Gemini embedding model
-            self._embedding_model = 'models/embedding-001'
-        elif self.provider_name == 'openai':
-            # OpenAI embedding model
-            self._embedding_model = 'text-embedding-3-small'
+        # Use actual provider name (after fallback logic)
+        actual_provider = self._get_actual_provider_name()
+        
+        if actual_provider == 'gemini':
+            # Gemini embedding model from config
+            self._embedding_model = settings.gemini_embedding_model
+        elif actual_provider == 'openai':
+            # OpenAI embedding model from config
+            self._embedding_model = settings.openai_embedding_model
         else:
-            raise ValueError(f"Unknown provider: {self.provider_name}")
+            raise ValueError(f"Unknown provider: {actual_provider}")
         
         return self._embedding_model
     
@@ -71,24 +110,31 @@ class EmbeddingGenerator:
             Embedding vector
         """
         
-        provider = await self._get_provider()
+        # Get provider first to determine actual provider being used
+        await self._get_provider()
+        actual_provider = self._get_actual_provider_name()
         model = self._get_embedding_model()
         
         try:
-            if self.provider_name == 'gemini':
-                # Use Gemini embedding
-                import google.generativeai as genai
+            if actual_provider == 'gemini':
+                # Use new Google GenAI SDK for embeddings
+                # DO NOT use provider.client - use separate genai client
+                client = self._get_genai_client()
                 
-                result = genai.embed_content(
+                logger.info(f"Generating Gemini embedding with model: {model}")
+                result = client.models.embed_content(
                     model=model,
-                    content=text,
-                    task_type="retrieval_document"
+                    contents=text
                 )
                 
-                return result['embedding']
+                # Extract embedding from response
+                # result.embeddings is a list-like object
+                logger.info(f"Gemini embedding result type: {type(result.embeddings)}")
+                return list(result.embeddings)
             
-            elif self.provider_name == 'openai':
-                # Use OpenAI embedding
+            elif actual_provider == 'openai':
+                # Use OpenAI embedding - need to get provider for OpenAI client
+                provider = await self._get_provider()
                 response = await provider.client.embeddings.create(
                     model=model,
                     input=text
@@ -97,10 +143,10 @@ class EmbeddingGenerator:
                 return response.data[0].embedding
             
             else:
-                raise ValueError(f"Embedding not supported for provider: {self.provider_name}")
+                raise ValueError(f"Embedding not supported for provider: {actual_provider}")
         
         except Exception as e:
-            logger.error(f"Failed to generate embedding: {str(e)}")
+            logger.error(f"Failed to generate embedding with {actual_provider}: {str(e)}", exc_info=True)
             raise
     
     async def generate_embeddings_batch(
@@ -181,24 +227,30 @@ class EmbeddingGenerator:
             Query embedding vector
         """
         
-        provider = await self._get_provider()
+        # Get provider first to determine actual provider being used
+        await self._get_provider()
+        actual_provider = self._get_actual_provider_name()
         model = self._get_embedding_model()
         
         try:
-            if self.provider_name == 'gemini':
-                # Use Gemini embedding with query task type
-                import google.generativeai as genai
+            if actual_provider == 'gemini':
+                # Use new Google GenAI SDK for query embeddings
+                # DO NOT use provider.client - use separate genai client
+                client = self._get_genai_client()
                 
-                result = genai.embed_content(
+                logger.info(f"Generating Gemini query embedding with model: {model}")
+                result = client.models.embed_content(
                     model=model,
-                    content=query,
-                    task_type="retrieval_query"
+                    contents=query
                 )
                 
-                return result['embedding']
+                # Extract embedding from response
+                logger.info(f"Gemini query embedding result type: {type(result.embeddings)}")
+                return list(result.embeddings)
             
-            elif self.provider_name == 'openai':
-                # Use OpenAI embedding
+            elif actual_provider == 'openai':
+                # Use OpenAI embedding - need to get provider for OpenAI client
+                provider = await self._get_provider()
                 response = await provider.client.embeddings.create(
                     model=model,
                     input=query
@@ -207,10 +259,10 @@ class EmbeddingGenerator:
                 return response.data[0].embedding
             
             else:
-                raise ValueError(f"Embedding not supported for provider: {self.provider_name}")
+                raise ValueError(f"Embedding not supported for provider: {actual_provider}")
         
         except Exception as e:
-            logger.error(f"Failed to generate query embedding: {str(e)}")
+            logger.error(f"Failed to generate query embedding with {actual_provider}: {str(e)}", exc_info=True)
             raise
 
 

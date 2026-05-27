@@ -64,13 +64,19 @@ class ProviderFactory:
                 is_healthy = await self.fallback_provider.health_check()
                 self.fallback_status = ProviderStatus.HEALTHY if is_healthy else ProviderStatus.UNAVAILABLE
                 logger.info(f"Fallback provider ({settings.fallback_provider}): {self.fallback_status}")
+            else:
+                logger.warning(f"Fallback provider ({settings.fallback_provider}) was not created (likely missing API key)")
+                self.fallback_status = ProviderStatus.UNAVAILABLE
         except Exception as e:
-            logger.error(f"Failed to initialize fallback provider: {str(e)}")
+            logger.error(f"Failed to initialize fallback provider: {str(e)}", exc_info=True)
             self.fallback_status = ProviderStatus.UNAVAILABLE
         
         # Validate at least one provider is available
         if self.primary_status == ProviderStatus.UNAVAILABLE and self.fallback_status == ProviderStatus.UNAVAILABLE:
-            raise RuntimeError("No LLM providers available")
+            logger.warning("No LLM providers are currently healthy, but continuing startup for POC")
+            logger.warning("Document upload and workflow execution will fail until a provider is available")
+            # For POC: Don't fail startup, just warn
+            # raise RuntimeError("No LLM providers available")
     
     def _create_provider(self, provider_name: str) -> Optional[LLMProvider]:
         """Create provider instance"""

@@ -10,6 +10,7 @@ pydantic-settings==2.1.0
 # LLM Providers
 openai==1.10.0
 google-generativeai==0.3.2
+google-genai==0.2.2
 
 # LangChain and LangGraph
 langchain==0.1.4

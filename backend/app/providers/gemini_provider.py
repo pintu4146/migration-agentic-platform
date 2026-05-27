@@ -38,9 +38,12 @@ class GeminiProvider(LLMProvider):
         
         # Configure Gemini
         genai.configure(api_key=api_key)
-        self.client = genai.GenerativeModel(model)
         
-        logger.info(f"Gemini provider initialized with model: {model}")
+        # Remove 'models/' prefix if present (SDK adds it automatically)
+        model_name = model.replace('models/', '') if model.startswith('models/') else model
+        self.client = genai.GenerativeModel(model_name)
+        
+        logger.info(f"Gemini provider initialized with model: {model_name}")
     
     async def generate(
         self,
@@ -213,13 +216,22 @@ class GeminiProvider(LLMProvider):
         try:
             # Simple generation to test API
             response = await self.client.generate_content_async(
-                "test",
-                generation_config=GenerationConfig(max_output_tokens=5)
+                "Say hello",
+                generation_config=GenerationConfig(max_output_tokens=10)
             )
-            logger.info("Gemini health check passed")
+            # Access response safely - use parts if text accessor fails
+            try:
+                response_text = response.text if response.text else "OK"
+            except ValueError:
+                # Response is not simple text, use parts accessor
+                response_text = str(response.parts[0]) if response.parts else "OK"
+            
+            logger.info(f"Gemini health check passed: {response_text[:50]}")
             return True
         except Exception as e:
             logger.error(f"Gemini health check failed: {str(e)}")
+            logger.error(f"Gemini model being used: {self.model}")
+            logger.error(f"API key starts with: {self.api_key[:20]}...")
             return False
     
     def _convert_tools_to_gemini_format(self, tools: List[Dict[str, Any]]) -> List[Any]:

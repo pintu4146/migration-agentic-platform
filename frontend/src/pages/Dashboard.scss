@@ -1,0 +1,83 @@
+.dashboard-grid {
+  margin-bottom: 3rem;
+}
+
+.dashboard-tile {
+  height: 100%;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+
+  .tile-icon {
+    color: var(--cds-icon-primary);
+    margin-bottom: 1rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+  }
+
+  p {
+    color: var(--cds-text-secondary);
+    font-size: 0.875rem;
+    line-height: 1.5;
+    flex: 1;
+  }
+}
+
+.status-section {
+  margin-top: 3rem;
+
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 400;
+    margin-bottom: 1rem;
+  }
+}
+
+.status-tile {
+  padding: 1.5rem;
+
+  .status-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--cds-border-subtle);
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    .status-label {
+      font-weight: 600;
+      color: var(--cds-text-primary);
+    }
+
+    .status-value {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.875rem;
+
+      &.status-ok {
+        color: var(--cds-support-success);
+      }
+
+      &.status-error {
+        color: var(--cds-support-error);
+      }
+
+      &.status-url {
+        color: var(--cds-text-secondary);
+        font-size: 0.75rem;
+        max-width: 60%;
+        text-align: right;
+        word-break: break-all;
+      }
+    }
+  }
+}
+
+// Made with Bob

@@ -18,6 +18,7 @@ from .logging_config import setup_logging
 from .tracing.langsmith import setup_langsmith
 from .providers.factory import ProviderFactory
 from .api import mcp_router, orchestration_router
+from .api.documents import router as documents_router
 from .models.schemas import (
     HealthResponse,
     ProviderHealthResponse,
@@ -53,12 +54,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Initialize provider factory
     global provider_factory
     provider_factory = ProviderFactory()
+    await provider_factory.initialize()  # IMPORTANT: Must call initialize()
     logger.info("Provider factory initialized")
     
     # Perform initial health check
     try:
-        primary_health = await provider_factory.primary_provider.health_check()
-        logger.info(f"Primary provider health: {primary_health}")
+        if provider_factory.primary_provider:
+            primary_health = await provider_factory.primary_provider.health_check()
+            logger.info(f"Primary provider health: {primary_health}")
         
         if provider_factory.fallback_provider:
             fallback_health = await provider_factory.fallback_provider.health_check()
@@ -98,6 +101,7 @@ app.add_middleware(
 # Include API routers
 app.include_router(mcp_router)
 app.include_router(orchestration_router)
+app.include_router(documents_router)
 
 
 # ============================================================================

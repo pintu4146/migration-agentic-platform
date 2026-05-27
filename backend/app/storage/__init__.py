@@ -1,16 +1,13 @@
 """
-Storage Layer
+Storage Module
 
-Provides data persistence and caching services.
-Follows Single Responsibility Principle - each client handles one storage type.
+Provides storage implementations for caching and vector storage.
 """
 
-from .redis_client import RedisClient
-from .qdrant_client import QdrantClient
+from .qdrant_store import QdrantStore
 
 __all__ = [
-    "RedisClient",
-    "QdrantClient",
+    'QdrantStore',
 ]
 
 # Made with Bob

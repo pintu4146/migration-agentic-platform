@@ -16,6 +16,9 @@ from .state import MigrationState, WorkflowPhase, create_initial_state
 from .state_manager import StateManager, get_state_manager
 from .supervisor import Supervisor, get_supervisor
 from .context_retrieval import ContextRetriever, get_context_retriever
+from ..agents.context_retrieval_agent import ContextRetrievalAgent
+from ..agents.extraction_agent import ExtractionAgent
+from ..agents.questionnaire_agent import QuestionnaireAgent
 from ..tracing.langsmith import trace_operation
 
 logger = logging.getLogger(__name__)
@@ -51,15 +54,46 @@ class WorkflowOrchestrator:
             supervisor: Supervisor instance
             context_retrieval: Context retrieval instance
         """
-        self.state_manager = state_manager or get_state_manager()
-        self.supervisor = supervisor or get_supervisor()
+        self.state_manager = state_manager
+        # Initialize supervisor synchronously if not provided
+        self.supervisor = supervisor if supervisor is not None else get_supervisor()
         self.context_retrieval = context_retrieval
+        self._state_manager_initialized = False
+        self._supervisor_initialized = True  # Already initialized
         self._context_retrieval_initialized = False
+        
+        # Initialize agents
+        self.context_retrieval_agent = ContextRetrievalAgent()
+        self.extraction_agent = ExtractionAgent()
+        self.questionnaire_agent = QuestionnaireAgent()
         
         # Build workflow graph
         self.graph = self._build_graph()
         self.checkpointer = MemorySaver()
         self.workflow = self.graph.compile(checkpointer=self.checkpointer)
+        
+        logger.info(f"WorkflowOrchestrator initialized with supervisor: {self.supervisor is not None}")
+    
+    async def _ensure_state_manager(self):
+        """Lazy initialize state manager."""
+        if not self._state_manager_initialized:
+            if self.state_manager is None:
+                self.state_manager = await get_state_manager()
+            self._state_manager_initialized = True
+    
+    async def _ensure_supervisor(self):
+        """Lazy initialize supervisor."""
+        if not self._supervisor_initialized:
+            if self.supervisor is None:
+                self.supervisor = get_supervisor()  # Not async
+                logger.info(f"Supervisor initialized: {self.supervisor is not None}")
+            self._supervisor_initialized = True
+        
+        # Double-check supervisor is not None
+        if self.supervisor is None:
+            logger.error("Supervisor is None after initialization attempt")
+            self.supervisor = get_supervisor()
+            logger.info(f"Supervisor re-initialized: {self.supervisor is not None}")
     
     async def _ensure_context_retrieval(self):
         """Lazy initialize context retrieval."""
@@ -147,6 +181,9 @@ class WorkflowOrchestrator:
         Returns:
             Initial state
         """
+        # Ensure state manager is initialized
+        await self._ensure_state_manager()
+        
         # Initialize state
         initial_state = await self.state_manager.initialize_state(project_id)
         
@@ -185,6 +222,9 @@ class WorkflowOrchestrator:
         Returns:
             Final state
         """
+        # Ensure state manager is initialized
+        await self._ensure_state_manager()
+        
         # Get current state
         state = await self.state_manager.get_state(project_id)
         
@@ -216,6 +256,9 @@ class WorkflowOrchestrator:
         Returns:
             Updated state
         """
+        # Ensure state manager is initialized
+        await self._ensure_state_manager()
+        
         # Get current state
         state = await self.state_manager.get_state(project_id)
         current_version = state["state_version"]
@@ -246,12 +289,10 @@ class WorkflowOrchestrator:
         # Update state with decision
         patch = {
             "next_node": decision.next_node,
-            "supervisor_reason": decision.reason,
-            "last_committed_by": "supervisor",
-            "last_committed_at": datetime.utcnow().isoformat()
+            "supervisor_reason": decision.reason
         }
         
-        # Commit state
+        # Commit state (committed_by and timestamps are set automatically by state_manager)
         updated_state = await self.state_manager.commit_state(
             project_id=state["project_id"],
             patch=patch,
@@ -297,15 +338,19 @@ class WorkflowOrchestrator:
         return updated_state
     
     async def _extraction_node(self, state: MigrationState) -> MigrationState:
-        """Extraction node: extract facts from context."""
-        # Placeholder: will be implemented in Phase 4
+        """Extraction node: extract facts from context using ExtractionAgent."""
+        logger.info(f"[extraction_node] Starting fact extraction for project: {state['project_id']}")
+        
+        # Execute extraction agent
+        agent_patch = await self.extraction_agent.execute(state)
+        
+        # Merge agent patch with phase update
         patch = {
-            "extracted_facts": {"placeholder": "Phase 4 implementation"},
-            "phase": WorkflowPhase.EXTRACTION.value,
-            "last_committed_by": "extraction_agent",
-            "last_committed_at": datetime.utcnow().isoformat()
+            **agent_patch,
+            "phase": WorkflowPhase.EXTRACTION.value
         }
         
+        # Commit state
         updated_state = await self.state_manager.commit_state(
             project_id=state["project_id"],
             patch=patch,
@@ -313,18 +358,23 @@ class WorkflowOrchestrator:
             committed_by="extraction_agent"
         )
         
+        logger.info(f"[extraction_node] Extraction complete for project: {state['project_id']}")
         return updated_state
     
     async def _questionnaire_node(self, state: MigrationState) -> MigrationState:
-        """Questionnaire node: generate questions."""
-        # Placeholder: will be implemented in Phase 4
+        """Questionnaire node: generate questions using QuestionnaireAgent."""
+        logger.info(f"[questionnaire_node] Starting question generation for project: {state['project_id']}")
+        
+        # Execute questionnaire agent
+        agent_patch = await self.questionnaire_agent.execute(state)
+        
+        # Merge agent patch with phase update
         patch = {
-            "missing_questions": [{"placeholder": "Phase 4 implementation"}],
-            "phase": WorkflowPhase.QUESTIONNAIRE.value,
-            "last_committed_by": "questionnaire_agent",
-            "last_committed_at": datetime.utcnow().isoformat()
+            **agent_patch,
+            "phase": WorkflowPhase.QUESTIONNAIRE.value
         }
         
+        # Commit state
         updated_state = await self.state_manager.commit_state(
             project_id=state["project_id"],
             patch=patch,
@@ -332,6 +382,7 @@ class WorkflowOrchestrator:
             committed_by="questionnaire_agent"
         )
         
+        logger.info(f"[questionnaire_node] Question generation complete for project: {state['project_id']}")
         return updated_state
     
     async def _intake_draft_node(self, state: MigrationState) -> MigrationState:
@@ -373,6 +424,9 @@ class WorkflowOrchestrator:
     
     async def _migration_planning_node(self, state: MigrationState) -> MigrationState:
         """Migration planning node: generate migration plan."""
+        # Ensure state manager is initialized
+        await self._ensure_state_manager()
+        
         # Placeholder: will be implemented in Phase 6
         patch = {
             "migration_plan": {"placeholder": "Phase 6 implementation"},
@@ -392,6 +446,9 @@ class WorkflowOrchestrator:
     
     async def _validation_node(self, state: MigrationState) -> MigrationState:
         """Validation node: validate final output."""
+        # Ensure state manager is initialized
+        await self._ensure_state_manager()
+        
         # Placeholder: will be implemented in Phase 6
         patch = {
             "validation_results": {"placeholder": "Phase 6 implementation"},
@@ -411,6 +468,9 @@ class WorkflowOrchestrator:
     
     async def _complete_node(self, state: MigrationState) -> MigrationState:
         """Complete node: finalize workflow."""
+        # Ensure state manager is initialized
+        await self._ensure_state_manager()
+        
         patch = {
             "phase": WorkflowPhase.COMPLETE.value,
             "last_committed_by": "workflow_orchestrator",
