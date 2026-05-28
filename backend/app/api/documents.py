@@ -7,6 +7,7 @@ Handles file uploads, parsing, chunking, and embedding generation.
 import logging
 import os
 import tempfile
+import mimetypes
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 from datetime import datetime
@@ -86,6 +87,13 @@ async def upload_document(
     """
     
     try:
+        # Validate filename
+        if not file.filename:
+            raise HTTPException(
+                status_code=400,
+                detail="Filename is required"
+            )
+        
         # Validate file type
         file_extension = Path(file.filename).suffix.lower()
         if not ParserFactory.is_supported(file.filename):
@@ -100,6 +108,26 @@ async def upload_document(
             temp_file.write(content)
             temp_path = temp_file.name
         
+        # Get file size
+        file_size = len(content)
+        
+        # Determine MIME type
+        mime_type = file.content_type
+        if not mime_type:
+            # Fallback to guessing from extension
+            mime_type, _ = mimetypes.guess_type(file.filename)
+        if not mime_type:
+            # Final fallback based on extension
+            mime_type = {
+                '.pdf': 'application/pdf',
+                '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                '.doc': 'application/msword',
+                '.txt': 'text/plain',
+                '.md': 'text/markdown',
+                '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                '.xls': 'application/vnd.ms-excel'
+            }.get(file_extension, 'application/octet-stream')
+        
         try:
             # Parse document
             logger.info(f"Parsing document: {file.filename}")
@@ -108,10 +136,25 @@ async def upload_document(
             # Get parser name from metadata
             parser_name = parsed_doc.get('metadata', {}).get('parser', 'unknown')
             
-            # Add upload metadata
+            # Extract page_count if available (from PDF parser)
+            page_count = parsed_doc.get('metadata', {}).get('page_count')
+            
+            # Add comprehensive upload metadata
             parsed_doc['metadata']['uploaded_at'] = datetime.utcnow().isoformat()
             parsed_doc['metadata']['project_id'] = project_id
-            parsed_doc['metadata']['file_size'] = len(content)
+            parsed_doc['metadata']['file_size'] = file_size
+            parsed_doc['metadata']['mime_type'] = mime_type
+            parsed_doc['metadata']['source_file'] = file.filename
+            parsed_doc['metadata']['created_date'] = datetime.utcnow().isoformat()
+            
+            # Add page_count if available (PDFs)
+            if page_count is not None:
+                parsed_doc['metadata']['page_count'] = page_count
+            
+            logger.info(
+                f"Document metadata: size={file_size}, mime={mime_type}, "
+                f"pages={page_count if page_count else 'N/A'}"
+            )
             
             # Chunk document
             logger.info(f"Chunking document: {file.filename}")

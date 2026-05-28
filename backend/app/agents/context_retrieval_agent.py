@@ -291,21 +291,53 @@ class ContextRetrievalAgent:
         normalized_docs = []
         
         for idx, doc in enumerate(context_pack.documents):
+            # Safely extract metadata with proper None handling
+            metadata_dict = {}
+            
+            if doc.metadata:
+                # Handle datetime fields - check if they're datetime objects or strings
+                created_at = doc.metadata.created_at
+                if created_at:
+                    if isinstance(created_at, str):
+                        metadata_dict["created_at"] = created_at
+                    else:
+                        metadata_dict["created_at"] = created_at.isoformat()
+                else:
+                    metadata_dict["created_at"] = None
+                
+                updated_at = doc.metadata.updated_at
+                if updated_at:
+                    if isinstance(updated_at, str):
+                        metadata_dict["updated_at"] = updated_at
+                    else:
+                        metadata_dict["updated_at"] = updated_at.isoformat()
+                else:
+                    metadata_dict["updated_at"] = None
+                
+                metadata_dict["author"] = doc.metadata.author
+                metadata_dict["source_url"] = doc.metadata.source_url
+                metadata_dict["word_count"] = doc.metadata.word_count or len(doc.content.split())
+            else:
+                # No metadata object - use defaults
+                metadata_dict = {
+                    "created_at": None,
+                    "updated_at": None,
+                    "author": None,
+                    "source_url": None,
+                    "word_count": len(doc.content.split())
+                }
+            
+            # Add source type and doc type
+            metadata_dict["source_type"] = doc.source.value
+            metadata_dict["doc_type"] = doc.type.value
+            
             normalized_doc = {
                 "doc_id": f"doc_{idx:03d}",
                 "source_id": doc.id,
                 "title": doc.title,
                 "content": doc.content,
                 "full_text": doc.content,
-                "metadata": {
-                    "source_type": doc.source.value,
-                    "doc_type": doc.type.value,
-                    "created_at": doc.metadata.created_at.isoformat() if doc.metadata and doc.metadata.created_at else None,
-                    "updated_at": doc.metadata.updated_at.isoformat() if doc.metadata and doc.metadata.updated_at else None,
-                    "author": doc.metadata.author if doc.metadata else None,
-                    "source_url": doc.metadata.source_url if doc.metadata else None,
-                    "word_count": doc.metadata.word_count if doc.metadata else len(doc.content.split()),
-                },
+                "metadata": metadata_dict,
                 "evidence_refs": doc.evidence_refs,
                 "confidence": doc.confidence,
                 "chunks": self._chunk_document(doc.content, chunk_size=1000)
@@ -352,7 +384,6 @@ class ContextRetrievalAgent:
         return chunks
 
 
-# Made with Bob
     def _documents_to_context_pack(
         self,
         documents: List[Dict[str, Any]],
@@ -379,7 +410,16 @@ class ContextRetrievalAgent:
             # Extract metadata
             metadata = doc.get('metadata', {})
             
-            # Create Document object
+            # Parse created_date if it exists
+            created_date = metadata.get('created_date')
+            if created_date and isinstance(created_date, str):
+                try:
+                    from datetime import datetime as dt
+                    created_date = dt.fromisoformat(created_date)
+                except:
+                    created_date = None
+            
+            # Create Document object with proper metadata
             doc_obj = Document(
                 id=doc.get('id', f"doc_{len(doc_objects)}"),
                 source=DocumentSource.UPLOAD,
@@ -388,13 +428,21 @@ class ContextRetrievalAgent:
                 content=doc.get('text', ''),
                 metadata=DocumentMetadata(
                     author=metadata.get('author'),
-                    created_at=metadata.get('created_date'),
-                    source_url=None,
-                    word_count=len(doc.get('text', '').split())
+                    created_at=created_date,  # Can be None or datetime
+                    updated_at=None,
+                    source_url=metadata.get('source_url'),
+                    word_count=len(doc.get('text', '').split()),
+                    version=metadata.get('version'),
+                    space=metadata.get('space'),
+                    labels=metadata.get('labels', []),
+                    parent_id=metadata.get('parent_id'),
+                    page_count=metadata.get('page_count'),
+                    file_size=metadata.get('file_size'),
+                    mime_type=metadata.get('mime_type')
                 ),
                 evidence_refs=[],
                 confidence=1.0,
-                extracted_at=datetime.utcnow().isoformat()
+                extracted_at=datetime.utcnow()  # ✅ datetime object (model expects this)
             )
             
             doc_objects.append(doc_obj)
@@ -405,7 +453,7 @@ class ContextRetrievalAgent:
             profile_name=source_name,
             documents=doc_objects,
             total_count=len(doc_objects),
-            retrieved_at=datetime.utcnow().isoformat(),
+            retrieved_at=datetime.utcnow(),  # ✅ datetime object (model expects this)
             cache_key=f"{project_id}_{source_name}_{datetime.utcnow().timestamp()}",
             metadata={"source": source_name}
         )
@@ -426,15 +474,48 @@ class ContextRetrievalAgent:
         doc_objects = []
         
         for doc_dict in context_dict.get('documents', []):
-            # Reconstruct metadata
+            # Reconstruct metadata with proper datetime handling
             meta_dict = doc_dict.get('metadata', {})
+            
+            # Parse datetime fields safely
+            created_at = meta_dict.get('created_at')
+            if created_at and isinstance(created_at, str):
+                try:
+                    created_at = datetime.fromisoformat(created_at)
+                except:
+                    created_at = None
+            
+            updated_at = meta_dict.get('updated_at')
+            if updated_at and isinstance(updated_at, str):
+                try:
+                    updated_at = datetime.fromisoformat(updated_at)
+                except:
+                    updated_at = None
+            
             metadata = DocumentMetadata(
                 author=meta_dict.get('author'),
-                created_at=meta_dict.get('created_at'),
-                updated_at=meta_dict.get('updated_at'),
+                created_at=created_at,
+                updated_at=updated_at,
                 source_url=meta_dict.get('source_url'),
-                word_count=meta_dict.get('word_count')
+                word_count=meta_dict.get('word_count'),
+                version=meta_dict.get('version'),
+                space=meta_dict.get('space'),
+                labels=meta_dict.get('labels', []),
+                parent_id=meta_dict.get('parent_id'),
+                page_count=meta_dict.get('page_count'),
+                file_size=meta_dict.get('file_size'),
+                mime_type=meta_dict.get('mime_type')
             )
+            
+            # Parse extracted_at
+            extracted_at = doc_dict.get('extracted_at')
+            if isinstance(extracted_at, str):
+                try:
+                    extracted_at = datetime.fromisoformat(extracted_at)
+                except:
+                    extracted_at = datetime.utcnow()
+            elif not isinstance(extracted_at, datetime):
+                extracted_at = datetime.utcnow()
             
             # Reconstruct Document
             doc_obj = Document(
@@ -446,10 +527,20 @@ class ContextRetrievalAgent:
                 metadata=metadata,
                 evidence_refs=doc_dict.get('evidence_refs', []),
                 confidence=doc_dict.get('confidence', 1.0),
-                extracted_at=datetime.fromisoformat(doc_dict['extracted_at'])
+                extracted_at=extracted_at
             )
             
             doc_objects.append(doc_obj)
+        
+        # Parse retrieved_at
+        retrieved_at = context_dict.get('retrieved_at')
+        if isinstance(retrieved_at, str):
+            try:
+                retrieved_at = datetime.fromisoformat(retrieved_at)
+            except:
+                retrieved_at = datetime.utcnow()
+        elif not isinstance(retrieved_at, datetime):
+            retrieved_at = datetime.utcnow()
         
         # Reconstruct ContextPack
         return ContextPack(
@@ -457,7 +548,7 @@ class ContextRetrievalAgent:
             profile_name=context_dict['profile_name'],
             documents=doc_objects,
             total_count=context_dict['total_count'],
-            retrieved_at=datetime.fromisoformat(context_dict['retrieved_at']),
+            retrieved_at=retrieved_at,
             cache_key=context_dict.get('cache_key', ''),
             metadata=context_dict.get('metadata', {})
         )

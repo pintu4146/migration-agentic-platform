@@ -10,8 +10,13 @@ This document provides a comprehensive architectural overview of the POC enterpr
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Frontend Layer                           │
 │              React + IBM Carbon Design System                    │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              Real-Time SSE Connection                     │  │
+│  │         (Server-Sent Events for Live Updates)             │  │
+│  └──────────────────────────────────────────────────────────┘  │
 └────────────────────────┬────────────────────────────────────────┘
-                         │ REST API
+                         │ REST API + SSE
 ┌────────────────────────▼────────────────────────────────────────┐
 │                      FastAPI Backend                             │
 │  ┌──────────────────────────────────────────────────────────┐  │
@@ -37,6 +42,11 @@ This document provides a comprehensive architectural overview of the POC enterpr
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │              Transactional State Manager                  │  │
 │  │         (Optimistic Locking + Changelog)                  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                │                                 │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              Redis State Synchronization                  │  │
+│  │    (LangGraph In-Memory → Redis for SSE Access)           │  │
 │  └──────────────────────────────────────────────────────────┘  │
 └──────────────────────┬───────────────────┬─────────────────────┘
                        │                   │
@@ -93,8 +103,10 @@ This document provides a comprehensive architectural overview of the POC enterpr
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | Frontend | React + Carbon Design | Enterprise UI |
+| Real-Time Updates | Server-Sent Events (SSE) | Live workflow progress |
 | API | FastAPI | REST endpoints |
 | Orchestration | LangGraph | Workflow engine |
+| State Sync | Redis | State persistence for SSE |
 | LLM | OpenAI + Gemini | Text generation |
 | Context Source | Confluence Cloud | Document retrieval |
 | Vector Store | Qdrant (in-memory) | Semantic search |
@@ -178,6 +190,175 @@ interface MigrationState {
 }
 ```
 
+## Real-Time Updates Architecture (SSE)
+
+### Overview
+
+The system implements Server-Sent Events (SSE) for real-time workflow progress updates, eliminating the need for frontend polling.
+
+### Architecture Pattern: Hybrid LangGraph + Redis
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Workflow Execution                        │
+│                                                              │
+│  LangGraph.astream() ──┐                                    │
+│         │              │                                     │
+│         ▼              ▼                                     │
+│   Node Outputs    Redis Sync                                │
+│         │              │                                     │
+│         │              ▼                                     │
+│         │         Redis State                               │
+│         │              │                                     │
+│         │              │                                     │
+│         ▼              ▼                                     │
+│   Final State    SSE Polling ──────► Frontend Updates       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Why Hybrid Approach?
+
+**Problem**: LangGraph state is in-memory, SSE endpoint needs persistent access.
+
+**Solution**: Dual-path architecture:
+1. **LangGraph Streaming**: Real-time node outputs during execution
+2. **Redis Sync**: State persisted after each node for SSE access
+3. **SSE Polling**: Separate endpoint polls Redis every 500ms
+
+**Benefits**:
+- ✅ Real-time updates during execution
+- ✅ State accessible after execution completes
+- ✅ Supports workflow pause/resume
+- ✅ Minimal overhead for POC
+
+### Implementation Details
+
+**Backend SSE Endpoint** (`backend/app/api/orchestration.py`):
+```python
+@router.get("/projects/{project_id}/workflow/stream")
+async def stream_workflow_state(project_id: str):
+    """Stream workflow state updates via SSE."""
+    
+    async def event_generator():
+        last_version = -1
+        last_phase = None
+        
+        while True:
+            # Poll Redis state every 500ms
+            state = await redis_client.get_state(project_id)
+            
+            if state:
+                current_version = state.get("state_version", 0)
+                current_phase = state.get("phase")
+                
+                # Send state_update event on version change
+                if current_version > last_version:
+                    yield {
+                        "event": "state_update",
+                        "data": json.dumps(state)
+                    }
+                    last_version = current_version
+                
+                # Send phase_transition event on phase change
+                if current_phase != last_phase:
+                    yield {
+                        "event": "phase_transition",
+                        "data": json.dumps({
+                            "from": last_phase,
+                            "to": current_phase,
+                            "timestamp": datetime.utcnow().isoformat()
+                        })
+                    }
+                    last_phase = current_phase
+            
+            await asyncio.sleep(0.5)
+    
+    return EventSourceResponse(event_generator())
+```
+
+**Frontend SSE Hook** (`frontend/src/hooks/useWorkflowSSE.js`):
+```javascript
+const useWorkflowSSE = (projectId) => {
+  const [state, setState] = useState(null);
+  const [lastPhase, setLastPhase] = useState(null);
+  
+  useEffect(() => {
+    const eventSource = new EventSource(
+      `/api/projects/${projectId}/workflow/stream`
+    );
+    
+    eventSource.addEventListener('state_update', (event) => {
+      const newState = JSON.parse(event.data);
+      setState(newState);
+    });
+    
+    eventSource.addEventListener('phase_transition', (event) => {
+      const transition = JSON.parse(event.data);
+      console.log(`Phase: ${transition.from} → ${transition.to}`);
+      setLastPhase(transition.to);
+    });
+    
+    return () => eventSource.close();
+  }, [projectId]);
+  
+  return { state, lastPhase };
+};
+```
+
+**State Synchronization** (`backend/app/orchestration/workflow.py`):
+```python
+async def execute_workflow(self, project_id: str) -> Dict[str, Any]:
+    """Execute workflow with Redis sync."""
+    
+    workflow = self._create_workflow()
+    
+    # Stream execution
+    async for output in workflow.astream(initial_state):
+        # Sync to Redis after each node
+        await self.redis_client.set_state(
+            project_id,
+            output,
+            ttl=3600  # 1 hour
+        )
+    
+    return output
+```
+
+### Event Types
+
+| Event | Trigger | Data | Purpose |
+|-------|---------|------|---------|
+| `state_update` | State version changes | Full state object | Update UI with latest state |
+| `phase_transition` | Phase changes | from, to, timestamp | Show phase progression |
+
+### Performance Characteristics
+
+- **Polling Interval**: 500ms (configurable)
+- **Latency**: <1 second for state updates
+- **Overhead**: Minimal Redis reads (cached in memory)
+- **Connection**: Long-lived HTTP connection per client
+
+### Error Handling
+
+**Connection Loss**:
+- Frontend automatically reconnects
+- State preserved in Redis
+- No data loss
+
+**Redis Unavailable**:
+- Workflow continues (in-memory state)
+- SSE returns empty until Redis recovers
+- Graceful degradation
+
+### Future Enhancements
+
+For production deployment:
+1. **WebSockets**: Replace SSE for bidirectional communication
+2. **Redis Pub/Sub**: Push-based updates instead of polling
+3. **Connection Pooling**: Manage multiple SSE connections efficiently
+4. **Compression**: Compress large state objects
+5. **Selective Updates**: Send only changed fields, not full state
+
 ## Security Considerations
 
 1. **Credentials Management**: All API keys in environment variables
@@ -185,6 +366,7 @@ interface MigrationState {
 3. **Data Privacy**: No persistent storage of sensitive data in POC
 4. **Audit Trail**: Complete changelog of all state modifications
 5. **Input Validation**: Pydantic models for all inputs
+6. **SSE Security**: Project-scoped streams, no cross-project access
 
 ## Scalability Considerations (Future)
 
