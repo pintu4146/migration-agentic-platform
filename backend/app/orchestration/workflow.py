@@ -231,12 +231,31 @@ class WorkflowOrchestrator:
         
         logger.info(f"Executing workflow for project: {project_id}")
         
-        # Run workflow
-        final_state = await self.workflow.ainvoke(state, config)
+        # Run workflow with state synchronization
+        # Use astream to get intermediate states and sync to Redis
+        final_state = None
+        async for event in self.workflow.astream(state, config):
+            # Event is a dict with node name as key and state update as value
+            for node_name, node_output in event.items():
+                if node_output:
+                    # Merge the output with current state
+                    if final_state is None:
+                        final_state = {**state, **node_output}
+                    else:
+                        final_state = {**final_state, **node_output}
+                    
+                    # Sync to Redis for SSE
+                    await self._sync_state_to_redis(project_id, final_state)
+                    
+                    logger.info(
+                        f"Workflow node '{node_name}' completed, "
+                        f"phase: {final_state.get('phase')}, "
+                        f"version: {final_state.get('state_version')}"
+                    )
         
         logger.info(f"Workflow completed for project: {project_id}")
         
-        return final_state
+        return final_state if final_state else state
     
     @trace_operation("workflow_resume", run_type="chain", tags=["workflow", "resume"])
     async def resume_workflow(
@@ -276,6 +295,29 @@ class WorkflowOrchestrator:
             )
         
         # Resume execution
+    
+    async def _sync_state_to_redis(self, project_id: str, state: Dict[str, Any]) -> None:
+        """
+        Sync LangGraph state to Redis for SSE streaming.
+        
+        Args:
+            project_id: Project identifier
+            state: Current workflow state
+        """
+        try:
+            await self._ensure_state_manager()
+            
+            # Save state to Redis using StateManager's internal method
+            await self.state_manager._save_to_redis(project_id, state)
+            
+            logger.debug(
+                f"Synced state to Redis for {project_id}, "
+                f"phase: {state.get('phase')}, "
+                f"version: {state.get('state_version')}"
+            )
+        except Exception as e:
+            logger.error(f"Failed to sync state to Redis: {e}")
+            # Don't fail the workflow if Redis sync fails
     
     async def _validate_project_exists(self, project_id: str) -> None:
         """
@@ -438,6 +480,7 @@ class WorkflowOrchestrator:
         # Placeholder: will be implemented in Phase 5
         return {
             "phase": WorkflowPhase.HUMAN_REVIEW.value,
+            "human_reviewed": False,  # Signal supervisor to pause
             "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "human_review_gate",

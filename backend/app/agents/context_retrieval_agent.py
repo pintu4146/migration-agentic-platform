@@ -394,7 +394,7 @@ class ContextRetrievalAgent:
                 ),
                 evidence_refs=[],
                 confidence=1.0,
-                extracted_at=datetime.utcnow()
+                extracted_at=datetime.utcnow().isoformat()
             )
             
             doc_objects.append(doc_obj)
@@ -405,7 +405,7 @@ class ContextRetrievalAgent:
             profile_name=source_name,
             documents=doc_objects,
             total_count=len(doc_objects),
-            retrieved_at=datetime.utcnow(),
+            retrieved_at=datetime.utcnow().isoformat(),
             cache_key=f"{project_id}_{source_name}_{datetime.utcnow().timestamp()}",
             metadata={"source": source_name}
         )

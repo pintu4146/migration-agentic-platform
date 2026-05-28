@@ -5,58 +5,48 @@ import {
   Tile,
   Loading,
   InlineNotification,
-  ProgressIndicator,
-  ProgressStep,
   Accordion,
   AccordionItem,
   CodeSnippet,
+  Grid,
+  Column,
 } from '@carbon/react';
-import { Play, Renew, CheckmarkFilled } from '@carbon/icons-react';
+import { Play, CheckmarkFilled } from '@carbon/icons-react';
 import {
   startWorkflow,
   executeWorkflow,
-  getWorkflowState,
 } from '../services/api';
 import ProjectSelector from '../components/ProjectSelector';
+import useWorkflowSSE from '../hooks/useWorkflowSSE';
+import WorkflowProgressStepper from '../components/WorkflowProgressStepper';
+import CurrentPhasePanel from '../components/CurrentPhasePanel';
+import { getCompletedPhases, getProgressPercentage } from '../utils/workflowHelpers';
 import './WorkflowExecution.scss';
 
 const WorkflowExecution = () => {
   const { projectId } = useParams();
   const navigate = useNavigate();
-  const [state, setState] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
 
-  useEffect(() => {
-    loadState();
-  }, [projectId]);
+  // Use SSE for real-time updates
+  const { state, loading, error: sseError, isConnected, phaseInfo, phaseTransition, refetch } = useWorkflowSSE(projectId);
 
-  const loadState = async () => {
-    try {
-      setLoading(true);
-      const response = await getWorkflowState(projectId);
-      setState(response);
-      setError(null);
-    } catch (err) {
-      if (err.response?.status === 404) {
-        setState(null);
-      } else {
-        setError('Failed to load workflow state');
-      }
-    } finally {
-      setLoading(false);
+  // Merge SSE error with local error
+  useEffect(() => {
+    if (sseError) {
+      setError(sseError);
     }
-  };
+  }, [sseError]);
 
   const handleStart = async () => {
     try {
       setExecuting(true);
       setError(null);
-      const response = await startWorkflow(projectId);
-      setState(response);
+      await startWorkflow(projectId);
       setSuccess('Workflow initialized successfully');
+      // SSE will automatically receive the update
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to start workflow');
     } finally {
@@ -68,9 +58,9 @@ const WorkflowExecution = () => {
     try {
       setExecuting(true);
       setError(null);
-      const response = await executeWorkflow(projectId);
-      setState(response);
-      setSuccess('Workflow executed successfully');
+      await executeWorkflow(projectId);
+      setSuccess('Workflow step executed successfully');
+      // SSE will automatically receive the update
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to execute workflow');
     } finally {
@@ -78,25 +68,21 @@ const WorkflowExecution = () => {
     }
   };
 
-  const getPhaseIndex = (phase) => {
-    const phases = [
-      'init',
-      'context_retrieval',
-      'extraction',
-      'questionnaire',
-      'intake_draft',
-      'human_review',
-      'migration_planning',
-      'validation',
-      'complete',
-    ];
-    return phases.indexOf(phase);
-  };
-
-  const currentPhaseIndex = state ? getPhaseIndex(state.phase) : 0;
-
   const handleProjectChange = (newProjectId) => {
     navigate(`/workflow/${newProjectId}`);
+  };
+
+  // Extract phase data
+  const completedPhases = state ? getCompletedPhases(state) : [];
+  const progressPercentage = state ? getProgressPercentage(state) : 0;
+
+  // Determine current phase status
+  const getPhaseStatus = () => {
+    if (!state) return 'in_progress';
+    if (state.phase === 'complete') return 'completed';
+    if (state.phase === 'human_review') return 'paused';
+    if (state.error) return 'error';
+    return 'in_progress';
   };
 
   return (
@@ -157,88 +143,155 @@ const WorkflowExecution = () => {
             </Tile>
           ) : (
             <>
-              <Tile className="workflow-tile">
-                <div className="workflow-header">
-                  <div className="workflow-info">
-                    <h3>Workflow Status</h3>
-                    <div className="status-badge">
-                      Phase: <strong>{state.phase}</strong>
-                    </div>
-                    <div className="status-badge">
-                      Version: <strong>v{state.state_version}</strong>
-                    </div>
-                  </div>
-                  <div className="workflow-actions">
-                    <Button
-                      kind="secondary"
-                      renderIcon={Renew}
-                      onClick={loadState}
-                      size="sm"
-                    >
-                      Refresh
-                    </Button>
-                    <Button
-                      kind="primary"
-                      renderIcon={Play}
-                      onClick={handleExecute}
-                      disabled={executing || state.phase === 'complete'}
-                      size="sm"
-                    >
-                      {executing ? 'Executing...' : 'Execute Next Step'}
-                    </Button>
-                  </div>
+              {/* Current Phase Panel */}
+              <CurrentPhasePanel
+                phase={state.phase}
+                status={getPhaseStatus()}
+              />
+
+              {/* Action Buttons */}
+              <div className="workflow-actions-bar">
+                <div className="workflow-meta">
+                  <span className="meta-item">
+                    Version: <strong>v{state.state_version}</strong>
+                  </span>
+                  <span className="meta-item">
+                    Progress: <strong>{progressPercentage}%</strong>
+                  </span>
+                  <span className="meta-item">
+                    Updated: <strong>{new Date(state.updated_at).toLocaleTimeString()}</strong>
+                  </span>
+                  {isConnected ? (
+                    <span className="meta-item sse-indicator connected">
+                      ⚡ Live Updates
+                    </span>
+                  ) : (
+                    <span className="meta-item sse-indicator disconnected">
+                      ⚠️ Reconnecting...
+                    </span>
+                  )}
                 </div>
+                <div className="action-buttons">
+                  <Button
+                    kind="primary"
+                    renderIcon={Play}
+                    onClick={handleExecute}
+                    disabled={executing || state.phase === 'complete' || state.phase === 'human_review'}
+                    size="md"
+                  >
+                    {executing ? 'Executing...' : 'Execute Next Step'}
+                  </Button>
+                </div>
+              </div>
 
-                <ProgressIndicator currentIndex={currentPhaseIndex} spaceEqually>
-                  <ProgressStep
-                    label="Initialize"
-                    description="Setup workflow"
-                    complete={currentPhaseIndex > 0}
-                  />
-                  <ProgressStep
-                    label="Context Retrieval"
-                    description="Fetch documents"
-                    complete={currentPhaseIndex > 1}
-                  />
-                  <ProgressStep
-                    label="Extraction"
-                    description="Extract facts"
-                    complete={currentPhaseIndex > 2}
-                  />
-                  <ProgressStep
-                    label="Questionnaire"
-                    description="Generate questions"
-                    complete={currentPhaseIndex > 3}
-                  />
-                  <ProgressStep
-                    label="Intake Draft"
-                    description="Create draft"
-                    complete={currentPhaseIndex > 4}
-                  />
-                  <ProgressStep
-                    label="Human Review"
-                    description="Review required"
-                    complete={currentPhaseIndex > 5}
-                  />
-                  <ProgressStep
-                    label="Migration Plan"
-                    description="Generate plan"
-                    complete={currentPhaseIndex > 6}
-                  />
-                  <ProgressStep
-                    label="Validation"
-                    description="Validate output"
-                    complete={currentPhaseIndex > 7}
-                  />
-                  <ProgressStep
-                    label="Complete"
-                    description="Workflow done"
-                    complete={currentPhaseIndex >= 8}
-                  />
-                </ProgressIndicator>
-              </Tile>
+              {/* Progress Stepper */}
+              <WorkflowProgressStepper
+                currentPhase={state.phase}
+                completedPhases={completedPhases}
+              />
 
-              <Accordion>
+              {/* Phase Transition Notification */}
+              {phaseTransition && (
+                <InlineNotification
+                  kind="info"
+                  title="Phase Transition"
+                  subtitle={`Workflow progressed from ${phaseTransition.from_phase} to ${phaseTransition.to_phase}`}
+                  lowContrast
+                  hideCloseButton
+                  style={{ marginTop: '1rem', marginBottom: '1rem' }}
+                />
+              )}
+
+              {/* Real-Time Phase Progress */}
+              {phaseInfo && phaseInfo.details && (
+                <Tile className="phase-progress-tile" style={{ marginTop: '1rem', marginBottom: '1rem' }}>
+                  <h4>Current Phase: {phaseInfo.current_phase}</h4>
+                  <div className="phase-details">
+                    {phaseInfo.details.documents_retrieved !== undefined && (
+                      <div className="detail-item">
+                        <span className="detail-label">Documents Retrieved:</span>
+                        <span className="detail-value">{phaseInfo.details.documents_retrieved}</span>
+                      </div>
+                    )}
+                    {phaseInfo.details.facts_extracted !== undefined && (
+                      <div className="detail-item">
+                        <span className="detail-label">Facts Extracted:</span>
+                        <span className="detail-value">{phaseInfo.details.facts_extracted}</span>
+                      </div>
+                    )}
+                    {phaseInfo.details.categories && (
+                      <div className="detail-item">
+                        <span className="detail-label">Categories:</span>
+                        <span className="detail-value">{phaseInfo.details.categories.join(', ')}</span>
+                      </div>
+                    )}
+                    {phaseInfo.details.questions_generated !== undefined && (
+                      <div className="detail-item">
+                        <span className="detail-label">Questions Generated:</span>
+                        <span className="detail-value">{phaseInfo.details.questions_generated}</span>
+                      </div>
+                    )}
+                    {phaseInfo.details.high_priority_questions !== undefined && (
+                      <div className="detail-item">
+                        <span className="detail-label">High Priority:</span>
+                        <span className="detail-value">{phaseInfo.details.high_priority_questions}</span>
+                      </div>
+                    )}
+                    {phaseInfo.details.draft_created !== undefined && (
+                      <div className="detail-item">
+                        <span className="detail-label">Draft Status:</span>
+                        <span className="detail-value">{phaseInfo.details.draft_created ? '✓ Created' : 'Pending'}</span>
+                      </div>
+                    )}
+                    {phaseInfo.details.status && (
+                      <div className="detail-item">
+                        <span className="detail-label">Status:</span>
+                        <span className="detail-value status-badge">{phaseInfo.details.status}</span>
+                      </div>
+                    )}
+                  </div>
+                </Tile>
+              )}
+
+              {/* Simple Status Summary */}
+              <Grid className="phase-status-grid">
+                <Column lg={5} md={4} sm={4}>
+                  <Tile className="phase-status-card">
+                    <h4>Context Pack</h4>
+                    <div className="metric-large">
+                      {state.context_pack ? '✓' : '—'}
+                    </div>
+                    <div className="metric-label">
+                      {state.context_pack ? 'Retrieved' : 'Pending'}
+                    </div>
+                  </Tile>
+                </Column>
+                <Column lg={5} md={4} sm={4}>
+                  <Tile className="phase-status-card">
+                    <h4>Extracted Facts</h4>
+                    <div className="metric-large">
+                      {state.extracted_facts ? '✓' : '—'}
+                    </div>
+                    <div className="metric-label">
+                      {state.extracted_facts ? 'Completed' : 'Pending'}
+                    </div>
+                  </Tile>
+                </Column>
+                <Column lg={6} md={4} sm={4}>
+                  <Tile className="phase-status-card">
+                    <h4>Questions</h4>
+                    <div className="metric-large">
+                      {state.missing_questions?.length || 0}
+                    </div>
+                    <div className="metric-label">
+                      Gap Questions
+                    </div>
+                  </Tile>
+                </Column>
+              </Grid>
+
+              {/* Detailed State Accordion */}
+              <Accordion style={{ marginTop: '2rem' }}>
                 <AccordionItem title="Workflow State Details">
                   <CodeSnippet type="multi" feedback="Copied to clipboard">
                     {JSON.stringify(state, null, 2)}

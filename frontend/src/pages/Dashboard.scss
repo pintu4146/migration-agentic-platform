@@ -1,3 +1,90 @@
+// Mission Statement Section
+.mission-statement {
+  margin-bottom: 3rem;
+  background: linear-gradient(135deg, #525252 0%, #393939 100%);
+  border-radius: 4px;
+  padding: 0;
+  position: relative;
+  overflow: hidden;
+  border-left: 4px solid #0f62fe;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+
+  .mission-content {
+    position: relative;
+    z-index: 1;
+    padding: 2.5rem;
+  }
+
+  .mission-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .mission-title {
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin-bottom: 1.5rem;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+  }
+
+  .mission-text {
+    font-size: 1rem;
+    line-height: 1.7;
+    margin-bottom: 1.25rem;
+    color: #f4f4f4;
+
+    &:last-of-type {
+      margin-bottom: 2rem;
+    }
+  }
+
+  .mission-highlights {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+
+    .highlight-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 1rem 1.25rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: all 0.3s ease;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.08);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+      }
+
+      .highlight-icon {
+        font-size: 1.25rem;
+        color: #0f62fe;
+        font-weight: bold;
+      }
+
+      span:last-child {
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: #ffffff;
+      }
+    }
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
 .dashboard-grid {
   margin-bottom: 3rem;
 }

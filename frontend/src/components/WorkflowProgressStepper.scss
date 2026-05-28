@@ -1,0 +1,39 @@
+/**
+ * WorkflowProgressStepper Styles
+ */
+
+.workflow-progress-stepper {
+  padding: 1.5rem;
+  background: var(--cds-ui-01);
+  border-radius: 4px;
+  margin-bottom: 2rem;
+
+  .cds--progress {
+    max-width: 100%;
+  }
+
+  .cds--progress-step {
+    min-width: 8rem;
+  }
+
+  .cds--progress-label {
+    font-weight: 600;
+    color: var(--cds-text-01);
+  }
+
+  .cds--progress-step--current .cds--progress-label {
+    color: var(--cds-interactive-01);
+  }
+
+  .cds--progress-step--complete .cds--progress-label {
+    color: var(--cds-text-02);
+  }
+
+  .cds--progress-step-button {
+    &:hover {
+      cursor: default;
+    }
+  }
+}
+
+// Made with Bob

@@ -1,0 +1,54 @@
+/**
+ * PhaseStatusCard Styles
+ */
+
+.phase-status-card {
+  text-align: center;
+  padding: 1.5rem;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  h4 {
+    margin-bottom: 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--cds-text-02);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .metric-large {
+    font-size: 3rem;
+    font-weight: 600;
+    color: var(--cds-interactive-01);
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+
+  .metric-label {
+    font-size: 0.875rem;
+    color: var(--cds-text-02);
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+  }
+
+  .metric-detail {
+    font-size: 0.75rem;
+    color: var(--cds-text-03);
+    margin-top: 0.25rem;
+    
+    &:not(:last-child) {
+      margin-bottom: 0.25rem;
+    }
+  }
+}
+
+// Made with Bob

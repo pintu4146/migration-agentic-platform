@@ -1,0 +1,118 @@
+/**
+ * ActivityLog Styles
+ */
+
+.activity-log {
+  padding: 1.5rem;
+  background: var(--cds-ui-01);
+  border-radius: 4px;
+  margin-bottom: 2rem;
+
+  .activity-log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+
+    h4 {
+      margin: 0;
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+
+    .live-badge {
+      animation: pulse 2s infinite;
+      font-weight: 600;
+    }
+  }
+
+  .activity-log-empty {
+    padding: 2rem;
+    text-align: center;
+    color: var(--cds-text-02);
+    background: var(--cds-ui-02);
+    border-radius: 4px;
+  }
+
+  .activity-list {
+    max-height: 400px;
+    overflow-y: auto;
+
+    .cds--structured-list-thead {
+      position: sticky;
+      top: 0;
+      background: var(--cds-ui-01);
+      z-index: 1;
+    }
+  }
+
+  .activity-row {
+    &:hover {
+      background: var(--cds-ui-02);
+    }
+  }
+
+  .activity-status-cell {
+    width: 60px;
+    text-align: center;
+  }
+
+  .activity-time-cell {
+    width: 100px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.875rem;
+    color: var(--cds-text-02);
+  }
+
+  .activity-message-cell {
+    flex: 1;
+    font-size: 0.875rem;
+  }
+
+  .activity-phase-cell {
+    width: 150px;
+  }
+
+  .activity-icon {
+    &.success-icon {
+      color: var(--cds-support-success);
+    }
+
+    &.progress-icon {
+      color: var(--cds-support-info);
+      animation: spin 2s linear infinite;
+    }
+
+    &.warning-icon {
+      color: var(--cds-support-warning);
+    }
+
+    &.error-icon {
+      color: var(--cds-support-error);
+    }
+
+    &.paused-icon {
+      color: var(--cds-text-03);
+    }
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { 
+    opacity: 1; 
+  }
+  50% { 
+    opacity: 0.5; 
+  }
+}
+
+@keyframes spin {
+  from { 
+    transform: rotate(0deg); 
+  }
+  to { 
+    transform: rotate(360deg); 
+  }
+}
+
+// Made with Bob

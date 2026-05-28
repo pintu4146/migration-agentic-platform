@@ -7,8 +7,11 @@ Follows SOLID principles with clear separation of concerns.
 
 import logging
 from typing import Dict, Any, Optional
+import json
+import asyncio
 from datetime import datetime
 
+from fastapi.responses import StreamingResponse
 from fastapi import APIRouter, HTTPException, status, Body
 from pydantic import BaseModel, Field
 
@@ -306,3 +309,183 @@ async def health_check() -> HealthResponse:
 
 
 # Made with Bob
+
+
+def _get_phase_details(state: Any) -> Dict[str, Any]:
+    """
+    Extract phase-specific details from state for UI display.
+    
+    Args:
+        state: Current workflow state
+        
+    Returns:
+        Dictionary with phase-specific details
+    """
+    phase = state.get("phase", "init")
+    details = {
+        "phase": phase,
+        "status": "in_progress"
+    }
+    
+    # Add phase-specific information
+    if phase == "context_retrieval":
+        docs = state.get("normalized_docs", [])
+        details["documents_retrieved"] = len(docs)
+        details["context_source"] = state.get("context_source")
+        
+    elif phase == "extraction":
+        facts = state.get("extracted_facts", {})
+        if facts:
+            total_facts = sum(len(facts.get(category, [])) for category in facts.keys())
+            details["facts_extracted"] = total_facts
+            details["categories"] = list(facts.keys())
+        
+    elif phase == "questionnaire":
+        questions = state.get("missing_questions", [])
+        details["questions_generated"] = len(questions)
+        high_priority = sum(1 for q in questions if q.get("priority") == "HIGH")
+        details["high_priority_questions"] = high_priority
+        
+    elif phase == "intake_draft":
+        draft = state.get("intake_draft")
+        details["draft_created"] = draft is not None
+        
+    elif phase == "human_review":
+        details["status"] = "awaiting_review"
+        details["reviewed"] = state.get("human_reviewed", False)
+        
+    elif phase == "complete":
+        details["status"] = "completed"
+        plan = state.get("migration_plan")
+        details["plan_generated"] = plan is not None
+    
+    return details
+
+
+@router.get("/stream/{project_id}")
+async def stream_workflow_state(project_id: str):
+    """
+    Server-Sent Events endpoint for real-time workflow state updates.
+    
+    Uses LangGraph native streaming for real-time event delivery.
+    Streams workflow state changes to the client as they happen.
+    
+    Args:
+        project_id: Project identifier
+        
+    Returns:
+        StreamingResponse with SSE events
+    """
+    async def event_generator():
+        """Generate SSE events using LangGraph native streaming"""
+        last_phase = None
+        
+        try:
+            # Get orchestrator
+            orchestrator = get_workflow_orchestrator()
+            
+            # Get current state from state manager
+            state_manager = await get_state_manager()
+            state = await state_manager.get_state(project_id)
+            
+            if not state:
+                # Send initial connection event
+                yield f"event: connected\n"
+                yield f"data: {json.dumps({'project_id': project_id, 'status': 'waiting'})}\n\n"
+                logger.info(f"SSE: Connected for {project_id}, waiting for state")
+                
+                # Poll for state initialization
+                while not state:
+                    await asyncio.sleep(0.5)
+                    state = await state_manager.get_state(project_id)
+            
+            # Send initial state
+            initial_event = {
+                "state": state,
+                "phase_info": {
+                    "current_phase": state.get("phase"),
+                    "version": state.get("state_version", 0),
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "details": _get_phase_details(state)
+                }
+            }
+            yield f"event: state_update\n"
+            yield f"data: {json.dumps(initial_event)}\n\n"
+            logger.info(f"SSE: Sent initial state for {project_id}")
+            
+            last_phase = state.get("phase")
+            
+            # Now poll for state changes (workflow updates state in Redis)
+            while True:
+                try:
+                    await asyncio.sleep(0.5)
+                    
+                    # Get updated state
+                    updated_state = await state_manager.get_state(project_id)
+                    
+                    if not updated_state:
+                        continue
+                    
+                    current_phase = updated_state.get("phase")
+                    current_version = updated_state.get("state_version", 0)
+                    
+                    # Check if state changed
+                    if (current_version != state.get("state_version", 0) or
+                        current_phase != last_phase):
+                        
+                        # Send phase transition event if phase changed
+                        if current_phase != last_phase and last_phase is not None:
+                            phase_event = {
+                                "from_phase": last_phase,
+                                "to_phase": current_phase,
+                                "version": current_version,
+                                "timestamp": datetime.utcnow().isoformat()
+                            }
+                            yield f"event: phase_transition\n"
+                            yield f"data: {json.dumps(phase_event)}\n\n"
+                            logger.info(f"SSE: Phase transition {last_phase} → {current_phase}")
+                        
+                        # Send state update event
+                        event_data = {
+                            "state": updated_state,
+                            "phase_info": {
+                                "current_phase": current_phase,
+                                "version": current_version,
+                                "timestamp": datetime.utcnow().isoformat(),
+                                "details": _get_phase_details(updated_state)
+                            }
+                        }
+                        yield f"event: state_update\n"
+                        yield f"data: {json.dumps(event_data)}\n\n"
+                        logger.info(f"SSE: Sent state update for {project_id}, version {current_version}, phase: {current_phase}")
+                        
+                        # Update tracking variables
+                        state = updated_state
+                        last_phase = current_phase
+                    
+                except Exception as e:
+                    logger.error(f"SSE error for {project_id}: {e}")
+                    error_data = json.dumps({"error": str(e)})
+                    yield f"event: error\n"
+                    yield f"data: {error_data}\n\n"
+                    await asyncio.sleep(2)
+                    
+        except asyncio.CancelledError:
+            logger.info(f"SSE connection closed for {project_id}")
+            raise
+        except Exception as e:
+            logger.error(f"SSE fatal error for {project_id}: {e}", exc_info=True)
+            error_data = json.dumps({"error": str(e), "fatal": True})
+            yield f"event: error\n"
+            yield f"data: {error_data}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+

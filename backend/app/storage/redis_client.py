@@ -8,13 +8,22 @@ Follows Single Responsibility Principle - only Redis operations.
 import json
 import logging
 from typing import Optional, Any, Dict
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import redis.asyncio as redis
 
 from ..config import settings
 
 logger = logging.getLogger(__name__)
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles datetime objects."""
+    
+    def default(self, o):
+        if isinstance(o, datetime):
+            return o.isoformat()
+        return super().default(o)
 
 
 class RedisClient:
@@ -96,6 +105,8 @@ class RedisClient:
         """
         Set value in Redis with optional TTL.
         
+        Automatically handles datetime serialization.
+        
         Args:
             key: Cache key
             value: Value to cache (will be JSON serialized)
@@ -108,7 +119,7 @@ class RedisClient:
             await self.connect()
         
         try:
-            serialized = json.dumps(value)
+            serialized = json.dumps(value, cls=DateTimeEncoder)
             ttl_seconds = ttl or settings.redis_ttl
             
             await self._client.setex(

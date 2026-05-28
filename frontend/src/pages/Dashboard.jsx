@@ -57,6 +57,44 @@ const Dashboard = () => {
         </p>
       </div>
 
+      <div className="mission-statement">
+        <div className="mission-content">
+          <div className="mission-icon">🚀</div>
+          <h2 className="mission-title">Our Mission</h2>
+          <p className="mission-text">
+            Modernizing enterprise applications requires deep understanding of the current system architecture,
+            dependencies, and technical stack. This AI-powered copilot streamlines the migration assessment process
+            by automatically analyzing your application artifacts—including configuration files (pom.xml, .properties),
+            technical documentation, and Confluence pages—to generate comprehensive intake documents.
+          </p>
+          <p className="mission-text">
+            Our multi-agent orchestration extracts critical facts about service endpoints, dependencies,
+            upstream/downstream integrations, security gaps, build configurations, and environment details.
+            The system identifies knowledge gaps, generates targeted questionnaires, and produces migration-ready
+            documentation for human review, enabling informed decision-making and accelerating your cloud
+            modernization journey.
+          </p>
+          <div className="mission-highlights">
+            <div className="highlight-item">
+              <span className="highlight-icon">✓</span>
+              <span>Automated Analysis</span>
+            </div>
+            <div className="highlight-item">
+              <span className="highlight-icon">✓</span>
+              <span>Multi-Agent AI</span>
+            </div>
+            <div className="highlight-item">
+              <span className="highlight-icon">✓</span>
+              <span>Human-in-the-Loop</span>
+            </div>
+            <div className="highlight-item">
+              <span className="highlight-icon">✓</span>
+              <span>Cloud-Ready Plans</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {error && (
         <InlineNotification
           kind="error"
