@@ -193,6 +193,7 @@ class DocumentChunker:
             'page_count': metadata.get('page_count'),
             'author': metadata.get('author'),
             'created_date': metadata.get('created_date'),
+            'project_id': metadata.get('project_id'),  # CRITICAL: Preserve project_id for filtering
         }
         
         return self.chunk_text(content, doc_metadata)

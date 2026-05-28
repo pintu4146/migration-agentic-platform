@@ -26,6 +26,7 @@ class DocumentSource(str, Enum):
     CONTEXT_STUDIO = "context_studio"
     CONFLUENCE = "confluence"
     UPLOAD = "upload"
+    QDRANT = "qdrant"  # For documents retrieved from Qdrant vector store
     UNKNOWN = "unknown"
 
 

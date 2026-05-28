@@ -86,6 +86,7 @@ QDRANT_PROFILES: Dict[str, QdrantSearchProfile] = {
     "context_retrieval_profile": QdrantSearchProfile(
         profile_name="context_retrieval_profile",
         profile_type="context_retrieval",
+        collection_name="project_{project_id}",  # Will be formatted with actual project_id
         limit=200,
         score_threshold=0.5,
         metadata_filters=None  # Broad search

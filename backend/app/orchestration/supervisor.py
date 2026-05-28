@@ -152,7 +152,7 @@ class Supervisor:
         elif current_phase == WorkflowPhase.HUMAN_REVIEW:
             if not state.get("human_reviewed"):
                 return SupervisorDecision(
-                    next_node="human_review",
+                    next_node="END",  # Pause workflow for human review
                     next_phase=WorkflowPhase.HUMAN_REVIEW,
                     reason="Waiting: human review pending"
                 )

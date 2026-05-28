@@ -116,9 +116,10 @@ class GeminiProvider(LLMProvider):
             full_prompt += schema_instruction
             
             # Configure generation
+            # Note: response_mime_type is not supported in older Gemini SDK versions
+            # We rely on prompt engineering to get JSON output
             generation_config = GenerationConfig(
-                temperature=temperature,
-                response_mime_type="application/json"
+                temperature=temperature
             )
             
             # Generate response
@@ -127,8 +128,37 @@ class GeminiProvider(LLMProvider):
                 generation_config=generation_config
             )
             
+            # Debug: Log response details
+            logger.info(f"Gemini response type: {type(response)}")
+            logger.info(f"Gemini response has text: {hasattr(response, 'text')}")
+            if hasattr(response, 'text'):
+                logger.info(f"Gemini response.text: {response.text[:500] if response.text else 'None'}")
+            if hasattr(response, 'candidates'):
+                logger.info(f"Gemini response.candidates: {len(response.candidates) if response.candidates else 0}")
+                if response.candidates:
+                    logger.info(f"First candidate: {response.candidates[0]}")
+            
             # Parse JSON response
-            content = response.text if response.text else "{}"
+            content = response.text if hasattr(response, 'text') and response.text else "{}"
+            
+            if not content or content == "{}":
+                logger.error(f"Empty response from Gemini. Full response: {response}")
+                raise ValueError("Empty response from Gemini API")
+            
+            # Strip markdown code blocks if present
+            # Gemini often wraps JSON in ```json ... ```
+            content = content.strip()
+            if content.startswith("```json"):
+                content = content[7:]  # Remove ```json
+            elif content.startswith("```"):
+                content = content[3:]  # Remove ```
+            
+            if content.endswith("```"):
+                content = content[:-3]  # Remove trailing ```
+            
+            content = content.strip()
+            
+            logger.info(f"Parsing JSON content (length: {len(content)})")
             result = json.loads(content)
             
             logger.info(f"Generated structured output with Gemini")

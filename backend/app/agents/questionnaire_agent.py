@@ -68,6 +68,13 @@ class QuestionnaireAgent:
         logger.info(f"[{self.agent_name}] Starting gap analysis")
         
         try:
+            # Validate project_id
+            project_id = state.get("project_id")
+            if not project_id:
+                raise ValueError("project_id is required in state")
+            
+            logger.info(f"[{self.agent_name}] Processing project: {project_id}")
+            
             # Initialize LLM provider if not set
             if self.llm is None:
                 self.llm = await get_provider(prefer_primary=True)
@@ -79,7 +86,9 @@ class QuestionnaireAgent:
             if not extracted_facts:
                 raise ValueError("No extracted facts available for gap analysis")
             
-            logger.info(f"[{self.agent_name}] Analyzing {len(confidence_scores)} facts")
+            logger.info(
+                f"[{self.agent_name}] Analyzing {len(confidence_scores)} facts for project {project_id}"
+            )
             
             # Identify gaps
             low_confidence_facts = self._identify_low_confidence_facts(
@@ -134,7 +143,7 @@ class QuestionnaireAgent:
                     "missing_fields": len(missing_fields),
                     "total_gaps": len(low_confidence_facts) + len(missing_fields)
                 },
-                "phase": "intake_draft",
+                "phase": "questionnaire",
                 "trace_metadata": {
                     **state.get("trace_metadata", {}),
                     "questionnaire": {

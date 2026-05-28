@@ -5,9 +5,24 @@ Defines the shared state structure for LangGraph workflow.
 Follows SOLID principles with clear type definitions.
 """
 
-from typing import TypedDict, Dict, Any, List, Optional
+from typing import TypedDict, Dict, Any, List, Optional, Annotated
 from datetime import datetime
 from enum import Enum
+from operator import add
+
+
+def merge_lists(left: List[Any], right: List[Any]) -> List[Any]:
+    """Merge two lists by appending right to left."""
+    return left + right
+
+
+def merge_dicts(left: Optional[Dict[str, Any]], right: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Merge two dicts, with right taking precedence."""
+    if right is None:
+        return left
+    if left is None:
+        return right
+    return {**left, **right}
 
 
 class WorkflowPhase(str, Enum):
@@ -64,10 +79,14 @@ class MigrationState(TypedDict):
     created_at: str
     updated_at: str
     
+    # ===== Supervisor Routing =====
+    next_node: Optional[str]  # Next node to execute (set by supervisor)
+    supervisor_reason: Optional[str]  # Reason for routing decision
+    
     # ===== MCP & Context =====
     mcp_request_profile: Optional[Dict[str, Any]]
     context_pack: Optional[Dict[str, Any]]
-    normalized_docs: List[Dict[str, Any]]
+    normalized_docs: Annotated[List[Dict[str, Any]], merge_lists]
     context_source: Optional[str]  # "mcp" or "qdrant"
     
     # ===== Extraction Results =====
@@ -76,14 +95,15 @@ class MigrationState(TypedDict):
     evidence_map: Optional[Dict[str, List[str]]]
     
     # ===== Questionnaire =====
-    missing_questions: List[Dict[str, Any]]
+    missing_questions: Annotated[List[Dict[str, Any]], merge_lists]
     question_priorities: Optional[Dict[str, int]]
-    answered_questions: List[Dict[str, Any]]
+    answered_questions: Annotated[List[Dict[str, Any]], merge_lists]
+    gap_analysis: Optional[Dict[str, Any]]  # Gap analysis summary
     
     # ===== Intake Draft =====
     intake_draft: Optional[Dict[str, Any]]
     human_reviewed: bool
-    review_comments: List[str]
+    review_comments: Annotated[List[str], merge_lists]
     review_timestamp: Optional[str]
     reviewer_id: Optional[str]
     
@@ -92,18 +112,18 @@ class MigrationState(TypedDict):
     
     # ===== Validation =====
     validation_results: Optional[Dict[str, Any]]
-    review_flags: List[str]
+    review_flags: Annotated[List[str], merge_lists]
     
     # ===== Traceability =====
     trace_metadata: Dict[str, Any]
-    state_changelog: List[StateChangelogEntry]
+    state_changelog: Annotated[List[StateChangelogEntry], merge_lists]
     last_committed_by: str
     last_committed_at: str
     
     # ===== Error Handling =====
     retry_count: int
     max_retries: int
-    error_log: List[Dict[str, Any]]
+    error_log: Annotated[List[Dict[str, Any]], merge_lists]
     last_error: Optional[str]
     
     # ===== Checkpointing =====
@@ -131,6 +151,10 @@ def create_initial_state(project_id: str) -> MigrationState:
         created_at=now,
         updated_at=now,
         
+        # Supervisor Routing
+        next_node=None,
+        supervisor_reason=None,
+        
         # Context
         mcp_request_profile=None,
         context_pack=None,
@@ -146,6 +170,7 @@ def create_initial_state(project_id: str) -> MigrationState:
         missing_questions=[],
         question_priorities=None,
         answered_questions=[],
+        gap_analysis=None,
         
         # Intake
         intake_draft=None,

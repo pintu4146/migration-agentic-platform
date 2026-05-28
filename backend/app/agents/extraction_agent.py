@@ -56,6 +56,13 @@ class ExtractionAgent:
         logger.info(f"[{self.agent_name}] Starting fact extraction")
         
         try:
+            # Validate project_id
+            project_id = state.get("project_id")
+            if not project_id:
+                raise ValueError("project_id is required in state")
+            
+            logger.info(f"[{self.agent_name}] Processing project: {project_id}")
+            
             # Initialize LLM provider if not set
             if self.llm is None:
                 self.llm = await get_provider(prefer_primary=True)
@@ -66,7 +73,25 @@ class ExtractionAgent:
             if not normalized_docs:
                 raise ValueError("No normalized documents available for extraction")
             
-            logger.info(f"[{self.agent_name}] Extracting from {len(normalized_docs)} documents")
+            # Validate documents belong to correct project
+            mismatched_docs = []
+            for idx, doc in enumerate(normalized_docs):
+                doc_project = doc.get("metadata", {}).get("project_id")
+                if doc_project and doc_project != project_id:
+                    mismatched_docs.append(f"doc[{idx}]: {doc_project}")
+            
+            if mismatched_docs:
+                logger.error(
+                    f"[{self.agent_name}] Found {len(mismatched_docs)} documents from wrong project: "
+                    f"{', '.join(mismatched_docs[:5])}"
+                )
+                raise ValueError(
+                    f"State corruption: {len(mismatched_docs)} documents belong to different projects"
+                )
+            
+            logger.info(
+                f"[{self.agent_name}] Validated {len(normalized_docs)} documents for project {project_id}"
+            )
             
             # Build extraction prompt
             prompt = self._build_extraction_prompt(normalized_docs)
@@ -147,9 +172,14 @@ class ExtractionAgent:
         max_chars = 15000  # Leave room for prompt template
         
         for doc in normalized_docs[:10]:  # Limit to 10 documents
-            doc_text = f"Document: {doc['title']}\n"
-            doc_text += f"Source ID: {doc['source_id']}\n"
-            doc_text += f"Content:\n{doc['content'][:2000]}\n"  # Limit per doc
+            # Handle both Document model format and dict format
+            doc_id = doc.get('id', doc.get('source_id', 'unknown'))
+            doc_title = doc.get('title', 'Untitled')
+            doc_content = doc.get('content', doc.get('text', ''))
+            
+            doc_text = f"Document: {doc_title}\n"
+            doc_text += f"Source ID: {doc_id}\n"
+            doc_text += f"Content:\n{doc_content[:2000]}\n"  # Limit per doc
             
             if total_chars + len(doc_text) > max_chars:
                 break

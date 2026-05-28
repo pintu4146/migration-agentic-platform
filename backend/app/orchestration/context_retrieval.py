@@ -126,8 +126,11 @@ class ContextRetriever:
             ContextPack or None if failed
         """
         try:
+            # Normalize profile name (remove _profile suffix if present)
+            normalized_name = profile_name.replace("_profile", "")
+            
             # Get MCP profile
-            profile = get_profile(ProfileType(profile_name))
+            profile = get_profile(ProfileType(normalized_name))
             
             # Retrieve from MCP
             context_pack = await self.mcp.retrieve(

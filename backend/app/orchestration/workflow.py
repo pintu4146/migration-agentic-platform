@@ -15,7 +15,6 @@ from langgraph.checkpoint.memory import MemorySaver
 from .state import MigrationState, WorkflowPhase, create_initial_state
 from .state_manager import StateManager, get_state_manager
 from .supervisor import Supervisor, get_supervisor
-from .context_retrieval import ContextRetriever, get_context_retriever
 from ..agents.context_retrieval_agent import ContextRetrievalAgent
 from ..agents.extraction_agent import ExtractionAgent
 from ..agents.questionnaire_agent import QuestionnaireAgent
@@ -43,8 +42,7 @@ class WorkflowOrchestrator:
     def __init__(
         self,
         state_manager: Optional[StateManager] = None,
-        supervisor: Optional[Supervisor] = None,
-        context_retrieval: Optional[ContextRetriever] = None
+        supervisor: Optional[Supervisor] = None
     ):
         """
         Initialize workflow orchestrator.
@@ -52,15 +50,12 @@ class WorkflowOrchestrator:
         Args:
             state_manager: State manager instance
             supervisor: Supervisor instance
-            context_retrieval: Context retrieval instance
         """
         self.state_manager = state_manager
         # Initialize supervisor synchronously if not provided
         self.supervisor = supervisor if supervisor is not None else get_supervisor()
-        self.context_retrieval = context_retrieval
         self._state_manager_initialized = False
         self._supervisor_initialized = True  # Already initialized
-        self._context_retrieval_initialized = False
         
         # Initialize agents
         self.context_retrieval_agent = ContextRetrievalAgent()
@@ -95,12 +90,6 @@ class WorkflowOrchestrator:
             self.supervisor = get_supervisor()
             logger.info(f"Supervisor re-initialized: {self.supervisor is not None}")
     
-    async def _ensure_context_retrieval(self):
-        """Lazy initialize context retrieval."""
-        if not self._context_retrieval_initialized:
-            if self.context_retrieval is None:
-                self.context_retrieval = await get_context_retriever()
-            self._context_retrieval_initialized = True
     
     def _build_graph(self) -> StateGraph:
         """
@@ -225,8 +214,17 @@ class WorkflowOrchestrator:
         # Ensure state manager is initialized
         await self._ensure_state_manager()
         
+        # PRE-EXECUTION VALIDATION: Verify project exists and has documents
+        logger.info(f"Validating project before execution: {project_id}")
+        await self._validate_project_exists(project_id)
+        
         # Get current state
         state = await self.state_manager.get_state(project_id)
+        
+        # If state doesn't exist, initialize it first
+        if state is None:
+            logger.info(f"State not found for project {project_id}, initializing...")
+            state = await self.state_manager.initialize_state(project_id)
         
         # Execute workflow
         config = config or {"configurable": {"thread_id": project_id}}
@@ -278,213 +276,207 @@ class WorkflowOrchestrator:
             )
         
         # Resume execution
-        return await self.execute_workflow(project_id)
+    
+    async def _validate_project_exists(self, project_id: str) -> None:
+        """
+        Validate that project exists and has documents before starting workflow.
+        
+        Args:
+            project_id: Project to validate
+            
+        Raises:
+            ValueError: If project doesn't exist or has no documents
+        """
+        from ..storage.qdrant_store import QdrantStore
+        
+        try:
+            # Initialize Qdrant store
+            qdrant_store = QdrantStore()
+            await qdrant_store.initialize()
+            
+            collection_name = f"project_{project_id}"
+            
+            # Check if collection exists and has documents
+            try:
+                count_result = qdrant_store.client.count(
+                    collection_name=collection_name,
+                    exact=True
+                )
+                
+                doc_count = count_result.count if count_result else 0
+                
+                if doc_count == 0:
+                    raise ValueError(
+                        f"Project '{project_id}' has no documents. "
+                        f"Please upload documents before starting workflow."
+                    )
+                
+                logger.info(
+                    f"Project validation passed: {project_id} has {doc_count} documents"
+                )
+                
+            except Exception as e:
+                if "not found" in str(e).lower() or "does not exist" in str(e).lower():
+                    raise ValueError(
+                        f"Project '{project_id}' not found. "
+                        f"Please upload documents first."
+                    )
+                raise
+                
+        except ValueError:
+            # Re-raise validation errors
+            raise
+        except Exception as e:
+            logger.error(f"Project validation failed: {str(e)}")
+            raise ValueError(f"Failed to validate project '{project_id}': {str(e)}")
     
     # Node implementations
     
-    async def _supervisor_node(self, state: MigrationState) -> MigrationState:
+    async def _supervisor_node(self, state: MigrationState) -> Dict[str, Any]:
         """Supervisor node: decide next step."""
-        decision = await self.supervisor.decide_next_node(state)
-        
-        # Update state with decision
-        patch = {
-            "next_node": decision.next_node,
-            "supervisor_reason": decision.reason
-        }
-        
-        # Commit state (committed_by and timestamps are set automatically by state_manager)
-        updated_state = await self.state_manager.commit_state(
-            project_id=state["project_id"],
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="supervisor"
-        )
-        
-        return updated_state
+        try:
+            # Ensure supervisor is initialized
+            await self._ensure_supervisor()
+            
+            logger.info(f"[supervisor_node] Current phase: {state['phase']}, version: {state['state_version']}")
+            
+            if self.supervisor is None:
+                logger.error("[supervisor_node] Supervisor is None!")
+                raise RuntimeError("Supervisor not initialized")
+            
+            decision = await self.supervisor.decide_next_node(state)
+            
+            logger.info(f"[supervisor_node] Decision: next_node={decision.next_node}, reason={decision.reason}")
+            
+            # Return state update - LangGraph will merge this automatically
+            return {
+                "next_node": decision.next_node,
+                "supervisor_reason": decision.reason,
+                "state_version": state["state_version"] + 1,
+                "updated_at": datetime.utcnow().isoformat(),
+                "last_committed_by": "supervisor",
+                "last_committed_at": datetime.utcnow().isoformat()
+            }
+            
+        except Exception as e:
+            logger.error(f"[supervisor_node] Error: {e}", exc_info=True)
+            raise
     
-    async def _context_retrieval_node(self, state: MigrationState) -> MigrationState:
+    async def _context_retrieval_node(self, state: MigrationState) -> Dict[str, Any]:
         """Context retrieval node: fetch context from MCP/Qdrant."""
-        await self._ensure_context_retrieval()
-        
         project_id = state["project_id"]
-        mcp_profile = state.get("mcp_request_profile") or {}
-        profile_name = mcp_profile.get("profile_name", "context_retrieval_profile")
-        query = mcp_profile.get("query")
+        logger.info(f"[context_retrieval_node] Retrieving context for project: {project_id}")
         
-        # Retrieve context
-        assert self.context_retrieval is not None
-        context_pack = await self.context_retrieval.retrieve(
-            project_id=project_id,
-            profile_name=profile_name,
-            query=query
+        # Execute context retrieval agent - uses execute(state) pattern like other agents
+        agent_patch = await self.context_retrieval_agent.execute(state)
+        
+        logger.info(
+            f"[context_retrieval_node] Context retrieval completed. "
+            f"Documents: {len(agent_patch.get('normalized_docs', []))}"
         )
         
-        # Update state
-        patch = {
-            "context_pack": context_pack.model_dump(),
+        # Return state update - LangGraph will merge this automatically
+        return {
+            **agent_patch,
             "phase": WorkflowPhase.CONTEXT_RETRIEVAL.value,
+            "state_version": state["state_version"] + 1,
+            "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "context_retrieval_agent",
             "last_committed_at": datetime.utcnow().isoformat()
         }
-        
-        # Commit state
-        updated_state = await self.state_manager.commit_state(
-            project_id=project_id,
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="context_retrieval_agent"
-        )
-        
-        return updated_state
     
-    async def _extraction_node(self, state: MigrationState) -> MigrationState:
+    async def _extraction_node(self, state: MigrationState) -> Dict[str, Any]:
         """Extraction node: extract facts from context using ExtractionAgent."""
-        logger.info(f"[extraction_node] Starting fact extraction for project: {state['project_id']}")
+        project_id = state["project_id"]
+        logger.info(f"[extraction_node] Starting fact extraction for project: {project_id}")
         
         # Execute extraction agent
         agent_patch = await self.extraction_agent.execute(state)
         
-        # Merge agent patch with phase update
-        patch = {
+        # Return state update - LangGraph will merge this automatically
+        return {
             **agent_patch,
-            "phase": WorkflowPhase.EXTRACTION.value
+            "phase": WorkflowPhase.EXTRACTION.value,
+            "state_version": state["state_version"] + 1,
+            "updated_at": datetime.utcnow().isoformat(),
+            "last_committed_by": "extraction_agent",
+            "last_committed_at": datetime.utcnow().isoformat()
         }
-        
-        # Commit state
-        updated_state = await self.state_manager.commit_state(
-            project_id=state["project_id"],
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="extraction_agent"
-        )
-        
-        logger.info(f"[extraction_node] Extraction complete for project: {state['project_id']}")
-        return updated_state
     
-    async def _questionnaire_node(self, state: MigrationState) -> MigrationState:
+    async def _questionnaire_node(self, state: MigrationState) -> Dict[str, Any]:
         """Questionnaire node: generate questions using QuestionnaireAgent."""
-        logger.info(f"[questionnaire_node] Starting question generation for project: {state['project_id']}")
+        project_id = state["project_id"]
+        logger.info(f"[questionnaire_node] Starting question generation for project: {project_id}")
         
         # Execute questionnaire agent
         agent_patch = await self.questionnaire_agent.execute(state)
         
-        # Merge agent patch with phase update
-        patch = {
+        # Return state update - LangGraph will merge this automatically
+        return {
             **agent_patch,
-            "phase": WorkflowPhase.QUESTIONNAIRE.value
+            "phase": WorkflowPhase.QUESTIONNAIRE.value,
+            "state_version": state["state_version"] + 1,
+            "updated_at": datetime.utcnow().isoformat(),
+            "last_committed_by": "questionnaire_agent",
+            "last_committed_at": datetime.utcnow().isoformat()
         }
-        
-        # Commit state
-        updated_state = await self.state_manager.commit_state(
-            project_id=state["project_id"],
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="questionnaire_agent"
-        )
-        
-        logger.info(f"[questionnaire_node] Question generation complete for project: {state['project_id']}")
-        return updated_state
     
-    async def _intake_draft_node(self, state: MigrationState) -> MigrationState:
+    async def _intake_draft_node(self, state: MigrationState) -> Dict[str, Any]:
         """Intake draft node: generate intake document."""
         # Placeholder: will be implemented in Phase 5
-        patch = {
+        return {
             "intake_draft": {"placeholder": "Phase 5 implementation"},
             "phase": WorkflowPhase.INTAKE_DRAFT.value,
+            "state_version": state["state_version"] + 1,
+            "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "intake_draft_agent",
             "last_committed_at": datetime.utcnow().isoformat()
         }
-        
-        updated_state = await self.state_manager.commit_state(
-            project_id=state["project_id"],
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="intake_draft_agent"
-        )
-        
-        return updated_state
     
-    async def _human_review_node(self, state: MigrationState) -> MigrationState:
+    async def _human_review_node(self, state: MigrationState) -> Dict[str, Any]:
         """Human review node: pause for human review."""
         # Placeholder: will be implemented in Phase 5
-        patch = {
+        return {
             "phase": WorkflowPhase.HUMAN_REVIEW.value,
+            "state_version": state["state_version"] + 1,
+            "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "human_review_gate",
             "last_committed_at": datetime.utcnow().isoformat()
         }
-        
-        updated_state = await self.state_manager.commit_state(
-            project_id=state["project_id"],
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="human_review_gate"
-        )
-        
-        return updated_state
     
-    async def _migration_planning_node(self, state: MigrationState) -> MigrationState:
+    async def _migration_planning_node(self, state: MigrationState) -> Dict[str, Any]:
         """Migration planning node: generate migration plan."""
-        # Ensure state manager is initialized
-        await self._ensure_state_manager()
-        
         # Placeholder: will be implemented in Phase 6
-        patch = {
+        return {
             "migration_plan": {"placeholder": "Phase 6 implementation"},
             "phase": WorkflowPhase.MIGRATION_PLANNING.value,
+            "state_version": state["state_version"] + 1,
+            "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "migration_planning_agent",
             "last_committed_at": datetime.utcnow().isoformat()
         }
-        
-        updated_state = await self.state_manager.commit_state(
-            project_id=state["project_id"],
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="migration_planning_agent"
-        )
-        
-        return updated_state
     
-    async def _validation_node(self, state: MigrationState) -> MigrationState:
+    async def _validation_node(self, state: MigrationState) -> Dict[str, Any]:
         """Validation node: validate final output."""
-        # Ensure state manager is initialized
-        await self._ensure_state_manager()
-        
         # Placeholder: will be implemented in Phase 6
-        patch = {
+        return {
             "validation_results": {"placeholder": "Phase 6 implementation"},
             "phase": WorkflowPhase.VALIDATION.value,
+            "state_version": state["state_version"] + 1,
+            "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "validation_agent",
             "last_committed_at": datetime.utcnow().isoformat()
         }
-        
-        updated_state = await self.state_manager.commit_state(
-            project_id=state["project_id"],
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="validation_agent"
-        )
-        
-        return updated_state
     
-    async def _complete_node(self, state: MigrationState) -> MigrationState:
+    async def _complete_node(self, state: MigrationState) -> Dict[str, Any]:
         """Complete node: finalize workflow."""
-        # Ensure state manager is initialized
-        await self._ensure_state_manager()
-        
-        patch = {
+        return {
             "phase": WorkflowPhase.COMPLETE.value,
+            "state_version": state["state_version"] + 1,
+            "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "workflow_orchestrator",
             "last_committed_at": datetime.utcnow().isoformat()
         }
-        
-        updated_state = await self.state_manager.commit_state(
-            project_id=state["project_id"],
-            patch=patch,
-            expected_version=state["state_version"],
-            committed_by="workflow_orchestrator"
-        )
-        
-        return updated_state
     
     def _route_from_supervisor(self, state: MigrationState) -> str:
         """

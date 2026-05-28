@@ -71,22 +71,41 @@ class QdrantClient:
             ContextPack with search results
         """
         try:
-            # Generate query embedding
-            embedding = await self._get_embedding(query)
+            # Format collection name with project_id
+            collection_name = profile.collection_name.format(project_id=project_id)
             
             # Build filters
             filters = self._build_filters(profile, project_id)
             
-            # Search Qdrant
-            results = self.client.search(
-                collection_name=profile.collection_name,
-                query_vector=embedding,
+            # POC: Use scroll to get all documents instead of semantic search
+            # This avoids the embedding API dependency for now
+            logger.info(f"Retrieving documents from collection: {collection_name}")
+            logger.info(f"Filter being applied: {filters}")
+            
+            # First, try without filter to see if documents exist
+            all_results, _ = self.client.scroll(
+                collection_name=collection_name,
                 limit=profile.limit,
-                score_threshold=profile.score_threshold,
-                query_filter=filters,
-                with_payload=profile.with_payload,
-                with_vectors=profile.with_vectors
+                with_payload=True,
+                with_vectors=False
             )
+            logger.info(f"Total documents in collection (no filter): {len(all_results)}")
+            
+            if all_results:
+                # Log first document structure
+                logger.info(f"Sample document payload keys: {list(all_results[0].payload.keys())}")
+                logger.info(f"Sample document payload: {all_results[0].payload}")
+            
+            # Now try with filter
+            results, _ = self.client.scroll(
+                collection_name=collection_name,
+                scroll_filter=filters,
+                limit=profile.limit,
+                with_payload=profile.with_payload,
+                with_vectors=False
+            )
+            
+            logger.info(f"Documents after filter: {len(results)}")
             
             # Convert to Document objects
             documents = [
@@ -143,10 +162,10 @@ class QdrantClient:
         """
         conditions = []
         
-        # Add project filter
+        # Add project filter - project_id is stored in metadata
         conditions.append(
             FieldCondition(
-                key="project_id",
+                key="metadata.project_id",
                 match=MatchValue(value=project_id)
             )
         )
@@ -212,7 +231,7 @@ class QdrantClient:
                 mime_type=payload.get("mime_type")
             ),
             evidence_refs=payload.get("evidence_refs", []),
-            confidence=hit.score,  # Use similarity score as confidence
+            confidence=getattr(hit, 'score', 1.0),  # Use score if available (search), else 1.0 (scroll)
             extracted_at=datetime.utcnow()
         )
     
@@ -240,7 +259,8 @@ class QdrantClient:
         """
         # Placeholder - will integrate with LLM provider in Phase 4
         # For now, return zero vector of correct dimension
-        return [0.0] * 1536  # OpenAI ada-002 dimension
+        # Match the dimension used during document upload (3072 for text-embedding-3-large)
+        return [0.0] * 3072  # OpenAI text-embedding-3-large dimension
     
     async def create_collection(
         self,
