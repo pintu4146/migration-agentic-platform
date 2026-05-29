@@ -1,0 +1,259 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+@use '@carbon/react/scss/type' as *;
+
+.review-flags-display {
+  padding: $spacing-05;
+  background-color: $layer-01;
+
+  &--empty {
+    padding: $spacing-07;
+    background-color: $layer-02;
+    border: 1px solid $border-subtle-01;
+    border-radius: 4px;
+  }
+
+  &__empty-state {
+    text-align: center;
+    padding: $spacing-07;
+  }
+
+  &__empty-icon {
+    width: 64px;
+    height: 64px;
+    fill: $support-success;
+    margin: 0 auto $spacing-05;
+    display: block;
+  }
+
+  &__empty-heading {
+    @include type-style('heading-03');
+    color: $text-primary;
+    margin-bottom: $spacing-03;
+  }
+
+  &__empty-text {
+    @include type-style('body-01');
+    color: $text-secondary;
+  }
+
+  &__summary {
+    margin-bottom: $spacing-06;
+    padding: $spacing-05;
+    background: linear-gradient(135deg, $layer-02 0%, $layer-03 100%);
+    border: 1px solid $border-subtle-01;
+    border-radius: 4px;
+  }
+
+  &__summary-content {
+    display: flex;
+    align-items: center;
+    gap: $spacing-05;
+  }
+
+  &__summary-icon {
+    flex-shrink: 0;
+  }
+
+  &__summary-text {
+    flex: 1;
+  }
+
+  &__summary-heading {
+    @include type-style('heading-04');
+    color: $text-primary;
+    margin-bottom: $spacing-02;
+  }
+
+  &__summary-description {
+    @include type-style('body-01');
+    color: $text-secondary;
+  }
+
+  &__summary-badges {
+    display: flex;
+    gap: $spacing-03;
+    flex-wrap: wrap;
+  }
+
+  &__icon {
+    width: 48px;
+    height: 48px;
+
+    &--warning {
+      fill: $support-warning;
+    }
+
+    &--info {
+      fill: $support-info;
+    }
+  }
+
+  &__section {
+    margin-bottom: $spacing-06;
+    padding: $spacing-05;
+    background-color: $layer-02;
+    border-radius: 4px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    &--critical {
+      border-left: 4px solid $support-error;
+    }
+
+    &--high {
+      border-left: 4px solid $support-error;
+    }
+
+    &--medium {
+      border-left: 4px solid $support-warning;
+    }
+
+    &--info {
+      border-left: 4px solid $support-info;
+    }
+
+    &--summary {
+      background: linear-gradient(135deg, $layer-02 0%, $layer-03 100%);
+    }
+  }
+
+  &__section-heading {
+    @include type-style('heading-03');
+    color: $text-primary;
+    margin-bottom: $spacing-05;
+    padding-bottom: $spacing-03;
+    border-bottom: 1px solid $border-subtle-01;
+    display: flex;
+    align-items: center;
+    gap: $spacing-03;
+  }
+
+  &__section-icon {
+    width: 24px;
+    height: 24px;
+
+    &--critical {
+      fill: $support-error;
+    }
+
+    &--high {
+      fill: $support-error;
+    }
+
+    &--medium {
+      fill: $support-warning;
+    }
+
+    &--info {
+      fill: $support-info;
+    }
+  }
+
+  &__flags-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: $spacing-04;
+  }
+
+  &__flag-tile {
+    padding: $spacing-05;
+    background-color: $layer-01;
+    border: 1px solid $border-subtle-01;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+
+    &:hover {
+      background-color: $layer-hover-01;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      transform: translateY(-2px);
+    }
+
+    &--critical {
+      border-left: 4px solid $support-error;
+    }
+
+    &--high {
+      border-left: 4px solid $support-error;
+    }
+
+    &--medium {
+      border-left: 4px solid $support-warning;
+    }
+
+    &--info {
+      border-left: 4px solid $support-info;
+    }
+  }
+
+  &__flag-header {
+    display: flex;
+    gap: $spacing-02;
+    margin-bottom: $spacing-04;
+    flex-wrap: wrap;
+  }
+
+  &__flag-issue,
+  &__flag-message {
+    @include type-style('body-01');
+    color: $text-primary;
+    margin-bottom: $spacing-04;
+    line-height: 1.6;
+  }
+
+  &__flag-recommendation {
+    padding: $spacing-04;
+    background-color: $layer-02;
+    border-radius: 4px;
+    margin-top: $spacing-04;
+
+    strong {
+      @include type-style('label-01');
+      display: block;
+      margin-bottom: $spacing-02;
+      color: $text-primary;
+    }
+
+    p {
+      @include type-style('body-01');
+      color: $text-secondary;
+      margin: 0;
+      line-height: 1.5;
+    }
+  }
+
+  &__validation-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: $spacing-04;
+  }
+
+  &__validation-metric {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: $spacing-04;
+    background-color: $layer-01;
+    border-radius: 4px;
+    border: 1px solid $border-subtle-01;
+  }
+
+  &__validation-label {
+    @include type-style('label-01');
+    color: $text-secondary;
+    margin-right: $spacing-03;
+  }
+
+  // Carbon component overrides
+  .cds--tile {
+    cursor: default;
+  }
+
+  .cds--tag {
+    margin-right: $spacing-02;
+  }
+}
+
+// Made with Bob

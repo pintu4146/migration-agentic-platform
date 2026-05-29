@@ -11,7 +11,7 @@ import {
   Grid,
   Column,
 } from '@carbon/react';
-import { Play, CheckmarkFilled } from '@carbon/icons-react';
+import { Play, CheckmarkFilled, View } from '@carbon/icons-react';
 import {
   startWorkflow,
   executeWorkflow,
@@ -172,15 +172,26 @@ const WorkflowExecution = () => {
                   )}
                 </div>
                 <div className="action-buttons">
-                  <Button
-                    kind="primary"
-                    renderIcon={Play}
-                    onClick={handleExecute}
-                    disabled={executing || state.phase === 'complete' || state.phase === 'human_review'}
-                    size="md"
-                  >
-                    {executing ? 'Executing...' : 'Execute Next Step'}
-                  </Button>
+                  {state.phase === 'human_review' ? (
+                    <Button
+                      kind="primary"
+                      renderIcon={View}
+                      onClick={() => navigate(`/review/${projectId}`)}
+                      size="md"
+                    >
+                      Go to Review
+                    </Button>
+                  ) : (
+                    <Button
+                      kind="primary"
+                      renderIcon={Play}
+                      onClick={handleExecute}
+                      disabled={executing || state.phase === 'complete'}
+                      size="md"
+                    >
+                      {executing ? 'Executing...' : 'Execute Next Step'}
+                    </Button>
+                  )}
                 </div>
               </div>
 

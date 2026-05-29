@@ -1,0 +1,270 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+@use '@carbon/react/scss/type' as *;
+
+.validation-results-viewer {
+  padding: $spacing-05;
+  background-color: $layer-01;
+
+  &--empty {
+    padding: $spacing-07;
+    text-align: center;
+    background-color: $layer-02;
+    border: 1px dashed $border-subtle-01;
+    border-radius: 4px;
+  }
+
+  &__empty-heading {
+    @include type-style('heading-03');
+    color: $text-secondary;
+    margin-bottom: $spacing-03;
+  }
+
+  &__empty-text {
+    @include type-style('body-01');
+    color: $text-secondary;
+  }
+
+  &__section {
+    margin-bottom: $spacing-06;
+    padding: $spacing-05;
+    background-color: $layer-02;
+    border-radius: 4px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    &--overall {
+      background: linear-gradient(135deg, $layer-02 0%, $layer-03 100%);
+      border: 1px solid $border-subtle-01;
+    }
+
+    &--critical {
+      border-left: 4px solid $support-error;
+    }
+  }
+
+  &__section-heading {
+    @include type-style('heading-03');
+    color: $text-primary;
+    margin-bottom: $spacing-05;
+    padding-bottom: $spacing-03;
+    border-bottom: 1px solid $border-subtle-01;
+  }
+
+  &__overall-status {
+    display: flex;
+    align-items: center;
+    gap: $spacing-04;
+  }
+
+  &__overall-heading {
+    @include type-style('heading-04');
+    color: $text-primary;
+    flex: 1;
+  }
+
+  &__status-icon {
+    width: 32px;
+    height: 32px;
+
+    &--pass {
+      fill: $support-success;
+    }
+
+    &--warning {
+      fill: $support-warning;
+    }
+
+    &--fail {
+      fill: $support-error;
+    }
+
+    &--info {
+      fill: $support-info;
+    }
+  }
+
+  &__metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: $spacing-05;
+  }
+
+  &__metric {
+    padding: $spacing-04;
+    background-color: $layer-01;
+    border-radius: 4px;
+    border: 1px solid $border-subtle-01;
+  }
+
+  &__metric-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: $spacing-03;
+  }
+
+  &__metric-label {
+    @include type-style('heading-02');
+    color: $text-primary;
+  }
+
+  &__progress {
+    margin-bottom: $spacing-02;
+  }
+
+  &__metric-score {
+    @include type-style('heading-01');
+    color: $text-primary;
+    display: block;
+    text-align: right;
+  }
+
+  &__findings-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  &__finding-item {
+    @include type-style('body-01');
+    display: flex;
+    align-items: flex-start;
+    padding: $spacing-03;
+    margin-bottom: $spacing-03;
+    background-color: $layer-01;
+    border-left: 3px solid $border-interactive;
+    border-radius: 2px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &__finding-icon {
+    flex-shrink: 0;
+    margin-right: $spacing-03;
+    margin-top: 2px;
+    fill: $support-warning;
+
+    &--error {
+      fill: $support-error;
+    }
+
+    &--info {
+      fill: $support-info;
+    }
+  }
+
+  &__subsection {
+    margin-bottom: $spacing-05;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+
+    strong {
+      @include type-style('heading-02');
+      display: block;
+      margin-bottom: $spacing-03;
+      color: $text-primary;
+    }
+  }
+
+  &__missing-sections {
+    margin-top: $spacing-04;
+    padding: $spacing-04;
+    background-color: $layer-01;
+    border-radius: 4px;
+
+    strong {
+      @include type-style('heading-02');
+      display: block;
+      margin-bottom: $spacing-03;
+      color: $text-primary;
+    }
+  }
+
+  &__tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: $spacing-02;
+  }
+
+  &__recommendations-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  &__recommendation-item {
+    @include type-style('body-01');
+    display: flex;
+    align-items: flex-start;
+    padding: $spacing-04;
+    margin-bottom: $spacing-03;
+    background-color: $layer-01;
+    border-left: 3px solid $support-success;
+    border-radius: 2px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &__recommendation-icon {
+    flex-shrink: 0;
+    margin-right: $spacing-03;
+    margin-top: 2px;
+    fill: $support-success;
+  }
+
+  // Carbon component overrides
+  .cds--accordion__item {
+    border-top: 1px solid $border-subtle-01;
+
+    &:last-child {
+      border-bottom: 1px solid $border-subtle-01;
+    }
+  }
+
+  .cds--accordion__heading {
+    @include type-style('heading-02');
+  }
+
+  .cds--accordion__content {
+    padding: $spacing-05;
+    background-color: $layer-01;
+  }
+
+  .cds--structured-list {
+    margin-top: $spacing-03;
+  }
+
+  .cds--structured-list-row {
+    &:hover {
+      background-color: $layer-hover-01;
+    }
+  }
+
+  .cds--structured-list-th,
+  .cds--structured-list-td {
+    padding: $spacing-04;
+  }
+
+  .cds--tag {
+    margin-right: $spacing-02;
+  }
+
+  .cds--progress-bar {
+    margin-bottom: $spacing-03;
+  }
+
+  .cds--progress-bar__label {
+    @include type-style('label-01');
+  }
+}
+
+// Made with Bob

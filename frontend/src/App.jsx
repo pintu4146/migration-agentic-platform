@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard';
 import DocumentUpload from './pages/DocumentUpload';
 import WorkflowExecution from './pages/WorkflowExecution';
 import ExtractedFacts from './pages/ExtractedFacts';
+import HumanReview from './pages/HumanReview';
 import './App.scss';
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
             <Route path="/upload" element={<DocumentUpload />} />
             <Route path="/workflow/:projectId" element={<WorkflowExecution />} />
             <Route path="/facts/:projectId" element={<ExtractedFacts />} />
+            <Route path="/review/:projectId" element={<HumanReview />} />
           </Routes>
         </Content>
       </Theme>

@@ -18,6 +18,8 @@ from .supervisor import Supervisor, get_supervisor
 from ..agents.context_retrieval_agent import ContextRetrievalAgent
 from ..agents.extraction_agent import ExtractionAgent
 from ..agents.questionnaire_agent import QuestionnaireAgent
+from ..agents.intake_draft_agent import IntakeDraftAgent
+from ..agents.review_validation_agent import ReviewValidationAgent
 from ..tracing.langsmith import trace_operation
 
 logger = logging.getLogger(__name__)
@@ -61,6 +63,8 @@ class WorkflowOrchestrator:
         self.context_retrieval_agent = ContextRetrievalAgent()
         self.extraction_agent = ExtractionAgent()
         self.questionnaire_agent = QuestionnaireAgent()
+        self.intake_draft_agent = IntakeDraftAgent()
+        self.review_validation_agent = ReviewValidationAgent()
         
         # Build workflow graph
         self.graph = self._build_graph()
@@ -99,6 +103,7 @@ class WorkflowOrchestrator:
         - START → supervisor
         - supervisor → context_retrieval | extraction | questionnaire | intake_draft | human_review | migration_planning | validation | END
         - Each node → supervisor (for routing)
+        - EXCEPT: human_review_node → END (to pause workflow without recursion)
         
         Returns:
             StateGraph instance
@@ -138,17 +143,22 @@ class WorkflowOrchestrator:
         )
         
         # Add edges back to supervisor from each node
+        # EXCEPT human_review_node which goes directly to END to pause workflow
         for node in [
             "context_retrieval_node",
             "extraction_node",
             "questionnaire_node",
             "intake_draft_node",
-            "human_review_node",
             "migration_planning_node",
             "validation_node",
             "complete_node"
         ]:
             graph.add_edge(node, "supervisor")
+        
+        # Human review node routes directly to END to pause the workflow
+        # This avoids the recursion issue where supervisor would route back to END
+        # creating an infinite loop
+        graph.add_edge("human_review_node", END)
         
         return graph
     
@@ -172,6 +182,20 @@ class WorkflowOrchestrator:
         """
         # Ensure state manager is initialized
         await self._ensure_state_manager()
+        
+        # Check if workflow already exists
+        existing_state = await self.state_manager.get_state(project_id)
+        if existing_state is not None:
+            logger.warning(
+                f"Workflow already exists for project {project_id} "
+                f"(phase: {existing_state.get('phase')}, version: {existing_state.get('state_version')}). "
+                f"Use execute_workflow to continue or delete the project to start fresh."
+            )
+            raise ValueError(
+                f"Workflow already exists for project '{project_id}'. "
+                f"Current phase: {existing_state.get('phase')}. "
+                f"Please use 'Execute Workflow' to continue, or delete the project to start a new workflow."
+            )
         
         # Initialize state
         initial_state = await self.state_manager.initialize_state(project_id)
@@ -226,6 +250,19 @@ class WorkflowOrchestrator:
             logger.info(f"State not found for project {project_id}, initializing...")
             state = await self.state_manager.initialize_state(project_id)
         
+        # CRITICAL: Check if workflow is paused at human review
+        # If so, don't execute - user must use resume_workflow instead
+        if (state.get('phase') == WorkflowPhase.HUMAN_REVIEW.value and
+            not state.get('human_reviewed', False)):
+            logger.warning(
+                f"Workflow is paused at human review for project {project_id}. "
+                f"Use resume_workflow to continue after review."
+            )
+            raise ValueError(
+                "Workflow is paused for human review. "
+                "Please approve or reject the review to continue."
+            )
+        
         # Execute workflow
         config = config or {"configurable": {"thread_id": project_id}}
         
@@ -252,8 +289,21 @@ class WorkflowOrchestrator:
                         f"phase: {final_state.get('phase')}, "
                         f"version: {final_state.get('state_version')}"
                     )
+                    
+                    # CRITICAL: Check if we've reached human review phase
+                    # If so, break the loop to pause the workflow
+                    if (final_state.get('phase') == WorkflowPhase.HUMAN_REVIEW.value and
+                        not final_state.get('human_reviewed', False)):
+                        logger.info(f"Workflow paused at human review phase for project: {project_id}")
+                        break
+            
+            # Break outer loop if we broke inner loop
+            if (final_state and
+                final_state.get('phase') == WorkflowPhase.HUMAN_REVIEW.value and
+                not final_state.get('human_reviewed', False)):
+                break
         
-        logger.info(f"Workflow completed for project: {project_id}")
+        logger.info(f"Workflow execution completed for project: {project_id}")
         
         return final_state if final_state else state
     
@@ -282,19 +332,17 @@ class WorkflowOrchestrator:
         
         # Apply updates if provided
         if updates:
-            patch = {
-                **updates,
-                "last_committed_at": datetime.utcnow().isoformat()
-            }
-            
+            # Don't include last_committed_at in patch - state_manager handles it
             state = await self.state_manager.commit_state(
                 project_id=project_id,
-                patch=patch,
+                patch=updates,
                 expected_version=current_version,
                 committed_by="human_reviewer"
             )
         
-        # Resume execution
+        # Resume execution with updated state
+        logger.info(f"Resuming workflow for project: {project_id}")
+        return await self.execute_workflow(project_id)
     
     async def _sync_state_to_redis(self, project_id: str, state: Dict[str, Any]) -> None:
         """
@@ -390,11 +438,10 @@ class WorkflowOrchestrator:
             
             logger.info(f"[supervisor_node] Decision: next_node={decision.next_node}, reason={decision.reason}")
             
-            # Return state update - LangGraph will merge this automatically
+            # Return state update - LangGraph handles state_version automatically
             return {
                 "next_node": decision.next_node,
                 "supervisor_reason": decision.reason,
-                "state_version": state["state_version"] + 1,
                 "updated_at": datetime.utcnow().isoformat(),
                 "last_committed_by": "supervisor",
                 "last_committed_at": datetime.utcnow().isoformat()
@@ -417,11 +464,10 @@ class WorkflowOrchestrator:
             f"Documents: {len(agent_patch.get('normalized_docs', []))}"
         )
         
-        # Return state update - LangGraph will merge this automatically
+        # Return state update - LangGraph handles state_version automatically
         return {
             **agent_patch,
             "phase": WorkflowPhase.CONTEXT_RETRIEVAL.value,
-            "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "context_retrieval_agent",
             "last_committed_at": datetime.utcnow().isoformat()
@@ -435,11 +481,10 @@ class WorkflowOrchestrator:
         # Execute extraction agent
         agent_patch = await self.extraction_agent.execute(state)
         
-        # Return state update - LangGraph will merge this automatically
+        # Return state update - LangGraph handles state_version automatically
         return {
             **agent_patch,
             "phase": WorkflowPhase.EXTRACTION.value,
-            "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "extraction_agent",
             "last_committed_at": datetime.utcnow().isoformat()
@@ -453,35 +498,48 @@ class WorkflowOrchestrator:
         # Execute questionnaire agent
         agent_patch = await self.questionnaire_agent.execute(state)
         
-        # Return state update - LangGraph will merge this automatically
+        # Return state update - LangGraph handles state_version automatically
         return {
             **agent_patch,
             "phase": WorkflowPhase.QUESTIONNAIRE.value,
-            "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "questionnaire_agent",
             "last_committed_at": datetime.utcnow().isoformat()
         }
     
     async def _intake_draft_node(self, state: MigrationState) -> Dict[str, Any]:
-        """Intake draft node: generate intake document."""
-        # Placeholder: will be implemented in Phase 5
+        """Intake draft node: generate intake document using IntakeDraftAgent."""
+        project_id = state["project_id"]
+        logger.info(f"[intake_draft_node] Starting intake draft generation for project: {project_id}")
+        
+        # Execute intake draft agent
+        agent_patch = await self.intake_draft_agent.execute(state)
+        
+        # Return state update - LangGraph handles state_version automatically
         return {
-            "intake_draft": {"placeholder": "Phase 5 implementation"},
+            **agent_patch,
             "phase": WorkflowPhase.INTAKE_DRAFT.value,
-            "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "intake_draft_agent",
             "last_committed_at": datetime.utcnow().isoformat()
         }
     
     async def _human_review_node(self, state: MigrationState) -> Dict[str, Any]:
-        """Human review node: pause for human review."""
-        # Placeholder: will be implemented in Phase 5
+        """
+        Human review node: pause workflow for human review.
+        
+        This node updates the phase to HUMAN_REVIEW and the workflow ends here.
+        The workflow will be resumed later via the API when human_reviewed=True.
+        
+        Note: This node routes directly to END, not back to supervisor,
+        to avoid the recursion issue.
+        """
+        logger.info(f"[human_review_node] Workflow paused for human review")
+        
+        # Update phase and metadata
+        # The workflow will END after this node (see graph structure)
         return {
             "phase": WorkflowPhase.HUMAN_REVIEW.value,
-            "human_reviewed": False,  # Signal supervisor to pause
-            "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "human_review_gate",
             "last_committed_at": datetime.utcnow().isoformat()
@@ -493,21 +551,25 @@ class WorkflowOrchestrator:
         return {
             "migration_plan": {"placeholder": "Phase 6 implementation"},
             "phase": WorkflowPhase.MIGRATION_PLANNING.value,
-            "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "migration_planning_agent",
             "last_committed_at": datetime.utcnow().isoformat()
         }
     
     async def _validation_node(self, state: MigrationState) -> Dict[str, Any]:
-        """Validation node: validate final output."""
-        # Placeholder: will be implemented in Phase 6
+        """Validation node: validate intake draft using ReviewValidationAgent."""
+        project_id = state["project_id"]
+        logger.info(f"[validation_node] Starting intake validation for project: {project_id}")
+        
+        # Execute review validation agent
+        agent_patch = await self.review_validation_agent.execute(state)
+        
+        # Return state update - LangGraph handles state_version automatically
         return {
-            "validation_results": {"placeholder": "Phase 6 implementation"},
+            **agent_patch,
             "phase": WorkflowPhase.VALIDATION.value,
-            "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
-            "last_committed_by": "validation_agent",
+            "last_committed_by": "review_validation_agent",
             "last_committed_at": datetime.utcnow().isoformat()
         }
     
@@ -515,7 +577,6 @@ class WorkflowOrchestrator:
         """Complete node: finalize workflow."""
         return {
             "phase": WorkflowPhase.COMPLETE.value,
-            "state_version": state["state_version"] + 1,
             "updated_at": datetime.utcnow().isoformat(),
             "last_committed_by": "workflow_orchestrator",
             "last_committed_at": datetime.utcnow().isoformat()

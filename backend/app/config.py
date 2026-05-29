@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     gemini_api_key: Optional[str] = Field(default=None, description="Google Gemini API key")
     gemini_model: str = Field(default="gemini-1.5-pro", description="Gemini model")
     gemini_embedding_model: str = Field(default="gemini-embedding-2", description="Gemini embedding model")
-    gemini_timeout: int = Field(default=60, description="Gemini timeout in seconds")
+    gemini_timeout: int = Field(default=120, description="Gemini timeout in seconds")
     gemini_max_retries: int = Field(default=3, description="Gemini max retries")
     
     # LangSmith Tracing

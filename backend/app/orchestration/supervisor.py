@@ -144,9 +144,22 @@ class Supervisor:
                     reason="Retry: intake not drafted"
                 )
             return SupervisorDecision(
+                next_node="validation",
+                next_phase=WorkflowPhase.VALIDATION,
+                reason="Intake drafted: validate before review"
+            )
+        
+        elif current_phase == WorkflowPhase.VALIDATION:
+            if not state.get("validation_results"):
+                return SupervisorDecision(
+                    next_node="validation",
+                    next_phase=WorkflowPhase.VALIDATION,
+                    reason="Retry: validation not complete"
+                )
+            return SupervisorDecision(
                 next_node="human_review",
                 next_phase=WorkflowPhase.HUMAN_REVIEW,
-                reason="Intake drafted: await human review"
+                reason="Validation complete: await human review"
             )
         
         elif current_phase == WorkflowPhase.HUMAN_REVIEW:
@@ -170,16 +183,9 @@ class Supervisor:
                     reason="Retry: plan not generated"
                 )
             return SupervisorDecision(
-                next_node="validation",
-                next_phase=WorkflowPhase.VALIDATION,
-                reason="Plan generated: validate output"
-            )
-        
-        elif current_phase == WorkflowPhase.VALIDATION:
-            return SupervisorDecision(
                 next_node="complete",
                 next_phase=WorkflowPhase.COMPLETE,
-                reason="Validation complete: workflow finished"
+                reason="Plan generated: workflow complete"
             )
         
         elif current_phase == WorkflowPhase.COMPLETE:

@@ -57,8 +57,8 @@ const ExtractedFacts = () => {
 
     const rows = facts.map((fact, index) => ({
       id: `${category}-${index}`,
-      name: fact.name || fact.key || 'N/A',
-      value: typeof fact.value === 'object' ? JSON.stringify(fact.value) : fact.value || 'N/A',
+      name: fact.category || fact.name || fact.key || 'N/A',
+      value: fact.fact || fact.evidence || (typeof fact.value === 'object' ? JSON.stringify(fact.value) : fact.value) || 'N/A',
       confidence: fact.confidence ? `${(fact.confidence * 100).toFixed(0)}%` : 'N/A',
       source: fact.source_id || fact.evidence_id || 'N/A',
     }));

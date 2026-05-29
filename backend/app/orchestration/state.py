@@ -115,7 +115,7 @@ class MigrationState(TypedDict):
     review_flags: Annotated[List[str], merge_lists]
     
     # ===== Traceability =====
-    trace_metadata: Dict[str, Any]
+    trace_metadata: Annotated[Dict[str, Any], merge_dicts]
     state_changelog: Annotated[List[StateChangelogEntry], merge_lists]
     last_committed_by: str
     last_committed_at: str

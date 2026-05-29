@@ -7,8 +7,10 @@ Implements the LLM provider interface for Google's Gemini API.
 from typing import Dict, Any, List, Optional
 import json
 import logging
+import asyncio
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
+from google.api_core.exceptions import DeadlineExceeded, ResourceExhausted
 
 from .base import LLMProvider, ProviderResponse
 
@@ -96,6 +98,32 @@ class GeminiProvider(LLMProvider):
             logger.error(f"Gemini API error: {str(e)}")
             raise
     
+    async def _retry_with_backoff(self, func, *args, **kwargs):
+        """
+        Retry a function with exponential backoff.
+        
+        Handles DeadlineExceeded and ResourceExhausted errors from Gemini API.
+        """
+        for attempt in range(self.max_retries):
+            try:
+                return await func(*args, **kwargs)
+            except (DeadlineExceeded, ResourceExhausted) as e:
+                if attempt == self.max_retries - 1:
+                    logger.error(f"Gemini API failed after {self.max_retries} retries: {str(e)}")
+                    raise
+                
+                # Exponential backoff: 2^attempt seconds
+                wait_time = 2 ** attempt
+                logger.warning(
+                    f"Gemini API timeout/rate limit (attempt {attempt + 1}/{self.max_retries}). "
+                    f"Retrying in {wait_time}s... Error: {str(e)}"
+                )
+                await asyncio.sleep(wait_time)
+            except Exception as e:
+                # Don't retry other exceptions
+                logger.error(f"Gemini API error (non-retryable): {str(e)}")
+                raise
+    
     async def generate_structured(
         self,
         prompt: str,
@@ -104,9 +132,9 @@ class GeminiProvider(LLMProvider):
         temperature: float = 0.3,
         metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
-        """Generate structured JSON output using Gemini"""
+        """Generate structured JSON output using Gemini with retry logic"""
         
-        try:
+        async def _generate():
             # Build prompt with schema instruction
             full_prompt = prompt
             if system_prompt:
@@ -165,6 +193,9 @@ class GeminiProvider(LLMProvider):
             
             return result
         
+        try:
+            # Use retry wrapper for the generation
+            return await self._retry_with_backoff(_generate)
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {str(e)}")
             raise ValueError(f"Invalid JSON response from Gemini: {str(e)}")

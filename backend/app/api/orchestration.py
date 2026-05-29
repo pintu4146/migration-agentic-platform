@@ -92,6 +92,7 @@ class GetStateResponse(BaseModel):
     human_reviewed: bool
     migration_plan: Optional[Dict[str, Any]]
     validation_results: Optional[Dict[str, Any]]
+    review_flags: Optional[list] = []
 
 
 class HealthResponse(BaseModel):
@@ -266,7 +267,8 @@ async def get_state(project_id: str) -> GetStateResponse:
             intake_draft=state.get("intake_draft"),
             human_reviewed=state.get("human_reviewed", False),
             migration_plan=state.get("migration_plan"),
-            validation_results=state.get("validation_results")
+            validation_results=state.get("validation_results"),
+            review_flags=state.get("review_flags", [])
         )
         
     except HTTPException:
