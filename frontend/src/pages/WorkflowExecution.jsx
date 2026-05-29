@@ -15,8 +15,10 @@ import { Play, CheckmarkFilled, View } from '@carbon/icons-react';
 import {
   startWorkflow,
   executeWorkflow,
+  resetWorkflow,
 } from '../services/api';
 import ProjectSelector from '../components/ProjectSelector';
+import WorkflowExistsModal from '../components/WorkflowExistsModal';
 import useWorkflowSSE from '../hooks/useWorkflowSSE';
 import WorkflowProgressStepper from '../components/WorkflowProgressStepper';
 import CurrentPhasePanel from '../components/CurrentPhasePanel';
@@ -29,6 +31,8 @@ const WorkflowExecution = () => {
   const [executing, setExecuting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [showExistsModal, setShowExistsModal] = useState(false);
+  const [existingWorkflowInfo, setExistingWorkflowInfo] = useState(null);
 
   // Use SSE for real-time updates
   const { state, loading, error: sseError, isConnected, phaseInfo, phaseTransition, refetch } = useWorkflowSSE(projectId);
@@ -48,7 +52,41 @@ const WorkflowExecution = () => {
       setSuccess('Workflow initialized successfully');
       // SSE will automatically receive the update
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to start workflow');
+      // Check if it's a 409 Conflict (workflow exists)
+      if (err.response?.status === 409) {
+        const detail = err.response?.data?.detail;
+        setExistingWorkflowInfo({
+          phase: detail?.phase || 'unknown',
+          stateVersion: detail?.state_version || 0,
+        });
+        setShowExistsModal(true);
+      } else {
+        setError(err.response?.data?.detail || 'Failed to start workflow');
+      }
+    } finally {
+      setExecuting(false);
+    }
+  };
+
+  const handleContinueWorkflow = () => {
+    setShowExistsModal(false);
+    setSuccess('Continuing from existing workflow state');
+    // The state is already loaded via SSE, just close the modal
+    refetch(); // Refresh the state display
+  };
+
+  const handleRestartWorkflow = async () => {
+    try {
+      setExecuting(true);
+      setError(null);
+      await resetWorkflow(projectId);
+      setShowExistsModal(false);
+      setSuccess('Workflow reset successfully. Starting fresh...');
+      // SSE will automatically receive the update
+      refetch();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to reset workflow');
+      setShowExistsModal(false);
     } finally {
       setExecuting(false);
     }
@@ -87,6 +125,16 @@ const WorkflowExecution = () => {
 
   return (
     <div className="page-container">
+      {/* Workflow Exists Modal */}
+      <WorkflowExistsModal
+        open={showExistsModal}
+        onClose={() => setShowExistsModal(false)}
+        onContinue={handleContinueWorkflow}
+        onRestart={handleRestartWorkflow}
+        existingPhase={existingWorkflowInfo?.phase}
+        loading={executing}
+      />
+
       <div className="page-header">
         <h1 className="page-title">Workflow Execution</h1>
         <p className="page-description">

@@ -113,6 +113,35 @@ class StateManager:
         
         return None
     
+    @trace_operation("state_delete", run_type="chain", tags=["state", "delete"])
+    async def delete_state(self, project_id: str) -> bool:
+        """
+        Delete state for a project.
+        
+        Args:
+            project_id: Project identifier
+            
+        Returns:
+            True if deleted, False if not found
+        """
+        async with self._lock:
+            # Check if state exists
+            state = await self.get_state(project_id)
+            if not state:
+                logger.warning(f"No state found to delete for project {project_id}")
+                return False
+            
+            # Delete from Redis
+            if self.redis:
+                await self.redis.delete(f"state:{project_id}")
+            
+            # Clear checkpoints
+            if project_id in self._checkpoints:
+                del self._checkpoints[project_id]
+            
+            logger.info(f"Deleted state for project {project_id}")
+            return True
+    
     @trace_operation("state_commit", run_type="chain", tags=["state", "write"])
     async def commit_state(
         self,

@@ -95,6 +95,19 @@ class GetStateResponse(BaseModel):
     review_flags: Optional[list] = []
 
 
+class ResetWorkflowRequest(BaseModel):
+    """Request to reset workflow"""
+    project_id: str = Field(description="Project identifier")
+
+
+class ResetWorkflowResponse(BaseModel):
+    """Response for workflow reset"""
+    project_id: str
+    state_version: int
+    phase: str
+    message: str
+
+
 class HealthResponse(BaseModel):
     """Health check response"""
     status: str
@@ -132,6 +145,20 @@ async def start_workflow(
             query=request.query
         )
         
+        # Check if workflow already exists
+        if initial_state.get("exists"):
+            # Return 409 Conflict with existing state info
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": initial_state.get("message"),
+                    "project_id": initial_state["project_id"],
+                    "phase": initial_state["phase"],
+                    "state_version": initial_state["state_version"],
+                    "exists": True
+                }
+            )
+        
         return StartWorkflowResponse(
             project_id=initial_state["project_id"],
             state_version=initial_state["state_version"],
@@ -139,6 +166,8 @@ async def start_workflow(
             message=f"Workflow started for project {request.project_id}"
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to start workflow: {e}", exc_info=True)
         raise HTTPException(
@@ -228,6 +257,44 @@ async def resume_workflow(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to resume workflow: {str(e)}"
+        )
+
+
+@router.post("/reset", response_model=ResetWorkflowResponse)
+async def reset_workflow(
+    request: ResetWorkflowRequest
+) -> ResetWorkflowResponse:
+    """
+    Reset workflow by deleting existing state and starting fresh.
+    
+    Args:
+        request: Workflow reset request
+        
+    Returns:
+        ResetWorkflowResponse with new initial state info
+        
+    Raises:
+        HTTPException: If workflow reset fails
+    """
+    try:
+        orchestrator = get_workflow_orchestrator()
+        
+        initial_state = await orchestrator.reset_workflow(
+            project_id=request.project_id
+        )
+        
+        return ResetWorkflowResponse(
+            project_id=initial_state["project_id"],
+            state_version=initial_state["state_version"],
+            phase=initial_state["phase"],
+            message=f"Workflow reset and reinitialized for project {request.project_id}"
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to reset workflow: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to reset workflow: {str(e)}"
         )
 
 

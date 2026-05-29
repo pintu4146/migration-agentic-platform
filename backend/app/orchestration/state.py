@@ -12,7 +12,28 @@ from operator import add
 
 
 def merge_lists(left: List[Any], right: List[Any]) -> List[Any]:
-    """Merge two lists by appending right to left."""
+    """
+    Merge two lists by appending right to left.
+    
+    Handles edge cases:
+    - If left is not a list, convert to list
+    - If right is not a list, convert to list
+    - If either is None, treat as empty list
+    """
+    # Handle None cases
+    if left is None:
+        left = []
+    if right is None:
+        right = []
+    
+    # Ensure left is a list
+    if not isinstance(left, list):
+        left = [left] if left else []
+    
+    # Ensure right is a list
+    if not isinstance(right, list):
+        right = [right] if right else []
+    
     return left + right
 
 

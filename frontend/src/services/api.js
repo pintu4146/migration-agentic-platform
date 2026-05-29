@@ -74,6 +74,13 @@ export const resumeWorkflow = async (projectId, updates = null) => {
   return response.data;
 };
 
+export const resetWorkflow = async (projectId) => {
+  const response = await api.post('/api/orchestration/reset', {
+    project_id: projectId,
+  });
+  return response.data;
+};
+
 // MCP API
 export const checkMCPHealth = async () => {
   const response = await api.get('/mcp/health');

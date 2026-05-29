@@ -186,16 +186,18 @@ class WorkflowOrchestrator:
         # Check if workflow already exists
         existing_state = await self.state_manager.get_state(project_id)
         if existing_state is not None:
-            logger.warning(
+            logger.info(
                 f"Workflow already exists for project {project_id} "
-                f"(phase: {existing_state.get('phase')}, version: {existing_state.get('state_version')}). "
-                f"Use execute_workflow to continue or delete the project to start fresh."
+                f"(phase: {existing_state.get('phase')}, version: {existing_state.get('state_version')})"
             )
-            raise ValueError(
-                f"Workflow already exists for project '{project_id}'. "
-                f"Current phase: {existing_state.get('phase')}. "
-                f"Please use 'Execute Workflow' to continue, or delete the project to start a new workflow."
-            )
+            # Return existing state info instead of raising error
+            return {
+                "project_id": project_id,
+                "state_version": existing_state.get("state_version"),
+                "phase": existing_state.get("phase"),
+                "exists": True,
+                "message": f"Workflow already exists at phase: {existing_state.get('phase')}"
+            }
         
         # Initialize state
         initial_state = await self.state_manager.initialize_state(project_id)
@@ -216,6 +218,30 @@ class WorkflowOrchestrator:
             )
         
         logger.info(f"Workflow started for project: {project_id}")
+        
+        return initial_state
+    
+    @trace_operation("workflow_reset", run_type="chain", tags=["workflow", "reset"])
+    async def reset_workflow(self, project_id: str) -> Dict[str, Any]:
+        """
+        Reset workflow by deleting existing state and reinitializing.
+        
+        Args:
+            project_id: Project identifier
+            
+        Returns:
+            New initial state
+        """
+        # Ensure state manager is initialized
+        await self._ensure_state_manager()
+        
+        # Delete existing state
+        await self.state_manager.delete_state(project_id)
+        
+        logger.info(f"Workflow reset for project: {project_id}")
+        
+        # Initialize fresh state
+        initial_state = await self.state_manager.initialize_state(project_id)
         
         return initial_state
     
