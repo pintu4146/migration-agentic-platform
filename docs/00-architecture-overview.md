@@ -40,8 +40,8 @@ This document provides a comprehensive architectural overview of the POC enterpr
 │  └──────────────────────────────────────────────────────────┘  │
 │                                                                  │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Transactional State Manager                  │  │
-│  │         (Optimistic Locking + Changelog)                  │  │
+│  │              LangGraph State Management                   │  │
+│  │    (Built-in Reducers + State Synchronization)            │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                                │                                 │
 │  ┌──────────────────────────────────────────────────────────┐  │
@@ -74,11 +74,12 @@ This document provides a comprehensive architectural overview of the POC enterpr
 - All transitions go through supervisor
 - Deterministic execution flow
 
-### 2. Transactional State Management
-- Optimistic locking with version control
-- Single commit at a time
-- State changelog for audit trail
-- Rollback capability
+### 2. LangGraph State Management
+- Built-in state reducers (merge_lists, merge_dicts)
+- Automatic state merging and conflict resolution
+- State synchronization to Redis for SSE
+- Changelog tracking for audit trail
+- Type-safe state updates with Annotated types
 
 ### 3. Plug-and-Play Architecture
 - MCP connector with retrieval profiles
