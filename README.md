@@ -1,592 +1,467 @@
-# Migration Copilot - Enterprise Application Modernization POC
+# 🚀 IBM Migration Copilot
 
-A proof-of-concept AI-powered copilot for enterprise application modernization, featuring multi-agent orchestration, configurable context retrieval, and transparent execution tracing.
+## Intelligent Application Modernization Through Agentic AI
 
-## 🎯 Overview
+> **Transform legacy application migration from weeks of manual analysis to hours of AI-powered intelligence.**
 
-The Migration Copilot assists with:
-- Ingesting Confluence pages and uploaded documents
-- Fetching context using configurable MCP connectors
-- Extracting migration-relevant facts
-- Generating questionnaire gaps
-- Drafting intake documents
-- Supporting human review workflows
-- Generating migration plans with cloud infrastructure recommendations
-- Providing transparent traces using LangSmith
+The IBM Migration Copilot is an enterprise-grade **Agentic AI application** that revolutionizes the application modernization process by automatically analyzing AS-IS infrastructure, generating comprehensive intake documentation with intelligent questionnaires, and producing actionable cloud migration plans.
 
-## 🏗️ Architecture
+---
 
-### Tech Stack
+## 🎯 What Problem Does This Solve?
 
-**Frontend:**
-- React
-- IBM Carbon Design System
+Traditional application migration requires:
+- ❌ **Weeks of manual document analysis** across scattered Confluence pages, configuration files, and technical specs
+- ❌ **Inconsistent intake documentation** with missing critical details
+- ❌ **Repetitive questionnaires** that fail to capture application-specific nuances
+- ❌ **Delayed migration planning** due to incomplete AS-IS understanding
 
-**Backend:**
-- FastAPI
-- Python 3.11+
+### ✅ The IBM Migration Copilot Solution
 
-**Agent Orchestration:**
-- LangGraph (supervisor-led multi-agent workflow)
-- Transactional state management with ACID properties
+Our AI-powered copilot **automatically**:
+1. **Ingests** project configuration files (pom.xml, build.gradle, application.properties, .env) and Confluence documentation
+2. **Extracts** migration-relevant facts about tech stack, dependencies, runtime configuration, and architectural decisions
+3. **Generates** intelligent questionnaires with context-aware questions to fill knowledge gaps
+4. **Drafts** comprehensive intake documents with AS-IS state, dependencies, constraints, and risks
+5. **Enables** human review and validation through an intuitive UI
+6. **Produces** detailed migration plans with cloud infrastructure recommendations and phased execution strategies
 
-**LLM Providers:**
-- OpenAI (primary)
-- Google Gemini (fallback)
-- Provider abstraction layer with circuit breaker pattern
+---
 
-**Context Sources:**
-- MCP connector (Confluence Cloud)
-- Document parsing (PDF, DOCX, Excel)
+## 🏗️ Architecture Highlights
 
-**Storage:**
-- Redis (caching)
-- Qdrant (vector storage)
+### Multi-Agent Orchestration with LangGraph
 
-**Observability:**
-- LangSmith (tracing)
-- Prometheus + Grafana (metrics)
+The copilot employs a **supervisor-led agent team** where each agent has specialized responsibilities:
 
-**Container Runtime:**
-- Podman
+| Agent | Responsibility |
+|-------|---------------|
+| **Orchestrator/Supervisor** | Controls workflow, manages phase transitions, validates state updates |
+| **Context Retrieval Agent** | Fetches and normalizes content from MCP connectors and uploaded files |
+| **Extraction Agent** | Extracts technical facts with confidence scoring and evidence tracking |
+| **Questionnaire Agent** | Identifies knowledge gaps and generates prioritized questions |
+| **Intake Draft Agent** | Produces structured intake documents ready for human review |
+| **Review/Validation Agent** | Checks for contradictions, unsupported claims, and completeness |
+| **Migration Planning Agent** | Recommends migration strategies with cloud infrastructure solutions |
 
-## 📁 Project Structure
+### Transaction-Style State Management
 
+- **LangGraph State Reducers**: Built-in `merge_lists` and `merge_dicts` for automatic conflict resolution
+- **Deterministic Workflow**: Every state transition is traceable and reproducible
+- **Safe Concurrent Updates**: Type-safe state patches prevent data corruption
+- **State Synchronization**: LangGraph in-memory state synced to Redis for real-time UI updates
+
+### Plug-and-Play Knowledge Retrieval
+
+- **Configurable MCP Connector**: Supports multiple knowledge sources (Confluence, SharePoint, etc.)
+- **Retrieval Profiles**: Each agent can request different context slices (extraction_profile, questionnaire_profile, planning_profile)
+- **Evidence Tracking**: Every extracted fact links back to source documents with page/line references
+- **Multi-Format Parsing**: Supports PDF, DOCX, Excel, XML, Markdown, Properties, and plain text
+
+### Enterprise-Grade Observability
+
+- **LangSmith Tracing**: Every node execution, tool call, and state transition is traced
+- **Real-Time Streaming**: Server-Sent Events (SSE) provide live workflow updates to the UI
+- **Transparent Decision Making**: See exactly how the AI moved from source documents to final recommendations
+- **Audit Trail**: Complete changelog of state diffs for compliance and debugging
+
+---
+
+## 🛠️ Technology Stack
+
+### Frontend
+- **React** with **IBM Carbon Design System** for enterprise-grade UI/UX
+- Real-time SSE streaming for live workflow updates
+- Structured data viewers for facts, questionnaires, and migration plans
+
+### Backend
+- **FastAPI** for high-performance async API
+- **LangGraph** for multi-agent orchestration
+- **OpenAI** (primary) and **Gemini** (fallback) with provider abstraction
+- **Redis** for state synchronization and caching
+- **Qdrant** for vector storage and semantic search
+
+### Parsing & Ingestion
+- **PyMuPDF**, **python-docx**, **pandas**, **openpyxl** for multi-format document parsing
+- **Sentence Transformers** for embeddings
+- **MCP Protocol** for plug-and-play knowledge source integration
+
+### Container Runtime
+- **Podman** for lightweight, secure containerization
+- **Podman Compose** for multi-container orchestration
+
+---
+
+## 📋 Prerequisites
+
+Before starting, ensure you have:
+
+1. **Python 3.11+** installed
+2. **Node.js 18+** and npm installed
+3. **Podman** installed and running
+4. **Git** for version control
+
+### API Keys Required
+
+Set these environment variables:
+
+```bash
+# LLM Providers (at least one required)
+OPENAI_API_KEY=your_openai_key_here
+GOOGLE_API_KEY=your_gemini_key_here  # Optional fallback
+
+# Observability
+LANGSMITH_API_KEY=your_langsmith_key_here
+LANGSMITH_PROJECT=migration-copilot-poc
+
+# MCP Connector (if using Confluence)
+MCP_BASE_URL=https://your-confluence-instance.com
+MCP_BEARER_TOKEN=your_confluence_token_here
 ```
-mig-26/
-├── docs/                           # Comprehensive documentation
-│   ├── 00-architecture-overview.md
-│   ├── 01-phase1-foundation.md
-│   ├── 02-phase2-mcp-connector.md
-│   ├── 03-phase3-orchestration.md
-│   ├── 04-phase4-core-agents.md
-│   ├── 05-phase5-intake-review.md
-│   ├── 06-phase6-migration-planning.md
-│   ├── 07-phase7-frontend-ui.md
-│   ├── 08-phase8-deployment.md
-│   ├── 09-single-point-of-failure-analysis.md
-│   ├── 10-agent-orchestration-analysis.md
-│   └── 11-observability-stack.md
-│
-├── backend/                        # FastAPI backend
-│   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py                # FastAPI application
-│   │   ├── config.py              # Configuration management
-│   │   ├── logging_config.py      # Structured logging
-│   │   ├── models/                # Pydantic schemas
-│   │   ├── providers/             # LLM provider abstraction
-│   │   │   ├── base.py
-│   │   │   ├── openai_provider.py
-│   │   │   ├── gemini_provider.py
-│   │   │   └── factory.py
-│   │   └── tracing/               # LangSmith integration
-│   │       └── langsmith.py
-│   ├── tests/                     # Test suite
-│   ├── requirements.txt
-│   ├── requirements-dev.txt
-│   ├── Dockerfile
-│   └── .env.example
-│
-├── frontend/                       # React frontend (Phase 7)
-│
-├── podman-compose.yml             # Container orchestration
-├── .env.example                   # Environment template
-└── README.md
-```
 
-## 🚀 Quick Start
+---
 
-### Prerequisites
+## 🚀 Quick Start Guide
 
-**System Requirements:**
-- Python 3.10 or higher
-- Node.js 18+ and npm (for frontend)
-- Podman Desktop (recommended) or Docker Desktop
-- Git
-- Windows PowerShell (for Windows users)
+### Step 1: Clone and Setup Environment
 
-**Required API Keys:**
-- OpenAI API key (primary LLM provider)
-- Google Gemini API key (fallback LLM provider)
-
-**Optional:**
-- LangSmith API key (for tracing and observability)
-- Confluence Cloud access (for MCP connector)
-
-### 🎯 Complete Startup Guide (Recommended)
-
-Follow these steps in order for a smooth setup:
-
-#### Step 1: System Prerequisites
-
-**Install Podman Desktop:**
-1. Download from: https://podman-desktop.io/downloads
-2. Install and launch Podman Desktop
-3. Verify installation:
-   ```powershell
-   podman --version
-   podman-compose --version
-   ```
-
-**Install Python 3.10+:**
-1. Download from: https://www.python.org/downloads/
-2. During installation, check "Add Python to PATH"
-3. Verify:
-   ```powershell
-   python --version
-   ```
-
-**Install Node.js 18+:**
-1. Download from: https://nodejs.org/
-2. Install LTS version
-3. Verify:
-   ```powershell
-   node --version
-   npm --version
-   ```
-
-#### Step 2: Clone and Configure
-
-```powershell
+```bash
 # Clone the repository
 git clone <repository-url>
 cd mig-26
 
 # Copy environment template
-cp backend/.env.example backend/.env
+cp .env.example .env
 
-# Edit .env file and add your API keys
-notepad backend/.env
+# Edit .env with your API keys
+notepad .env  # Windows
+nano .env     # Linux/Mac
 ```
 
-**Required Environment Variables:**
+### Step 2: Start Container Services
+
 ```bash
-# LLM Providers (REQUIRED)
-OPENAI_API_KEY=sk-your-openai-key-here
-GEMINI_API_KEY=your-gemini-key-here
+# Start Redis and Qdrant containers
+cd backend
+podman-compose up -d
 
-# Application Settings
-ENVIRONMENT=development
-LOG_LEVEL=INFO
-PRIMARY_PROVIDER=openai
-FALLBACK_PROVIDER=gemini
-
-# Optional: LangSmith Tracing
-LANGCHAIN_TRACING_V2=false
-LANGCHAIN_API_KEY=your-langsmith-key
-LANGCHAIN_PROJECT=migration-copilot-poc
-
-# Optional: MCP Connector (Confluence)
-MCP_BASE_URL=https://your-domain.atlassian.net/wiki
-MCP_BEARER_TOKEN=your-confluence-token
+# Verify containers are running
+podman ps
 ```
 
-#### Step 3: Backend Setup
-
-**Run the setup script (Windows):**
-```powershell
-cd backend
-.\setup-podman.ps1
+Expected output:
+```
+CONTAINER ID  IMAGE                              STATUS
+<id>          docker.io/library/redis:7-alpine   Up
+<id>          docker.io/qdrant/qdrant:latest     Up
 ```
 
-This script will:
-- Create Python virtual environment
-- Install all dependencies
-- Verify imports
-- Set up Podman containers (Redis, Qdrant)
+### Step 3: Setup Backend
 
-**Or manually:**
-```powershell
-cd backend
-
+```bash
 # Create virtual environment
 python -m venv venv
 
 # Activate virtual environment
-.\venv\Scripts\activate
+.\venv\Scripts\activate  # Windows
+source venv/bin/activate # Linux/Mac
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Verify installation
-python -c "import fastapi; import langchain; print('✓ All imports successful')"
-```
-
-#### Step 4: Start Infrastructure Containers
-
-**Start Redis and Qdrant:**
-```powershell
-cd backend
-.\start-containers-simple.ps1
-```
-
-This will start:
-- **Redis** on `localhost:6379` (state management)
-- **Qdrant** on `localhost:6333` (vector storage)
-
-**Verify containers are running:**
-```powershell
-podman ps
-```
-
-You should see:
-```
-CONTAINER ID  IMAGE                              STATUS      PORTS
-xxxxx         docker.io/library/redis:7-alpine   Up          0.0.0.0:6379->6379/tcp
-xxxxx         docker.io/qdrant/qdrant:latest     Up          0.0.0.0:6333->6333/tcp
-```
-
-#### Step 5: Start Backend Server
-
-```powershell
-cd backend
-
-# Activate virtual environment (if not already activated)
-.\venv\Scripts\activate
 
 # Start FastAPI server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-**Expected output:**
-```
-INFO:     Started server process [xxxxx]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://127.0.0.1:8000
-```
+Backend will be available at: `http://localhost:8000`
 
-**Verify backend is running:**
-- API Health: http://localhost:8000/health
-- API Docs: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+### Step 4: Setup Frontend
 
-#### Step 6: Start Frontend
-
-**Open a new terminal:**
-```powershell
+```bash
+# Open new terminal
 cd frontend
 
-# Install dependencies (first time only)
+# Install dependencies
 npm install
 
 # Start development server
 npm run dev
 ```
 
-**Expected output:**
-```
-VITE v5.x.x  ready in xxx ms
+Frontend will be available at: `http://localhost:5173`
 
-➜  Local:   http://localhost:5173/
-➜  Network: use --host to expose
-```
+### Step 5: Create Your First Project
 
-**Access the application:**
-- Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
+1. Navigate to `http://localhost:5173`
+2. Click **"Create New Project"**
+3. Enter project details (name, description)
+4. Upload configuration files:
+   - `pom.xml` or `build.gradle` (build configuration)
+   - `application.properties` or `.env` (runtime configuration)
+   - Any relevant documentation (PDF, DOCX, Markdown)
+5. Optionally connect Confluence pages via MCP
 
-#### Step 7: Verify Complete Setup
+### Step 6: Start the Workflow
 
-**Test the full stack:**
+1. Click **"Start Workflow"** on the dashboard
+2. Watch real-time progress as agents:
+   - Retrieve and normalize context
+   - Extract technical facts
+   - Generate questionnaires
+   - Draft intake document
+3. Review extracted facts and questionnaires
+4. Approve or modify the intake draft
+5. Generate migration plan with cloud recommendations
 
-1. **Check Backend Health:**
-   ```powershell
-   curl http://localhost:8000/health
-   ```
-   Expected: `{"status":"healthy"}`
+### Step 7: Review and Export
 
-2. **Check Provider Health:**
-   ```powershell
-   curl http://localhost:8000/health/providers
-   ```
-   Expected: Provider status with OpenAI/Gemini health
+1. Navigate to **"Human Review"** page
+2. Review:
+   - **Intake Draft**: Comprehensive AS-IS state summary
+   - **Validation Results**: Completeness and consistency checks
+   - **Review Flags**: Items requiring attention
+3. Approve the intake document
+4. View the generated **Migration Plan** with:
+   - Recommended migration strategy
+   - Phased execution plan
+   - Cloud infrastructure recommendations
+   - Risk assessment and rollback procedures
 
-3. **Check Frontend:**
-   - Open http://localhost:5173
-   - You should see the Migration Copilot dashboard
+---
 
-4. **Check Containers:**
-   ```powershell
-   podman ps
-   ```
-   Expected: Redis and Qdrant running
+## 📊 Key Features
 
-### 🔄 Daily Development Workflow
+### 🔍 Intelligent Context Extraction
 
-**Start everything:**
-```powershell
-# Terminal 1: Start containers
+- **Multi-Source Ingestion**: Confluence pages, uploaded files, and MCP-connected knowledge bases
+- **Smart Parsing**: Automatically detects and parses 8+ file formats
+- **Evidence Linking**: Every extracted fact references source documents with page/line numbers
+- **Confidence Scoring**: AI assigns confidence levels to extracted information
+
+### 📝 Dynamic Questionnaire Generation
+
+- **Gap Analysis**: Identifies missing or weakly supported information
+- **Prioritized Questions**: Ranks questions by importance and impact
+- **Context-Aware**: Questions are tailored to the specific application stack
+- **Evidence Mapping**: Links questions to missing evidence for targeted follow-up
+
+### 📄 Comprehensive Intake Documentation
+
+- **Structured Format**: Consistent intake document structure across all projects
+- **AS-IS State Summary**: Current architecture, tech stack, and deployment model
+- **Dependencies & Constraints**: External systems, compliance requirements, and limitations
+- **Risk Assessment**: Identified risks with severity levels and mitigation strategies
+- **Open Questions**: Clearly flagged items requiring human input
+
+### 🔄 Human-in-the-Loop Review
+
+- **Intuitive UI**: IBM Carbon Design System for familiar enterprise experience
+- **Real-Time Updates**: SSE streaming shows workflow progress live
+- **Validation Checks**: Automated consistency and completeness validation
+- **Approval Workflow**: Human review gate before migration planning
+
+### ☁️ Cloud Migration Planning
+
+- **Strategy Recommendations**: Rehost, Replatform, Refactor, or Hybrid approaches
+- **Infrastructure Mapping**: Specific cloud services for each application component
+- **Phased Execution**: Step-by-step migration plan with dependencies
+- **Rollback Procedures**: Safety measures and contingency plans
+
+### 🔬 Full Observability
+
+- **LangSmith Integration**: Trace every agent decision and LLM call
+- **State Changelog**: Complete audit trail of workflow state changes
+- **Debug Panel**: In-UI access to trace metadata and execution logs
+- **Performance Metrics**: Track agent execution times and token usage
+
+---
+
+## 🏢 Enterprise-Ready Features
+
+### Security & Compliance
+
+- **No Data Persistence**: POC uses in-memory/ephemeral storage (production-ready architecture documented)
+- **API Key Management**: Environment-based credential management
+- **Audit Logging**: Complete traceability of all operations
+- **Role-Based Access**: (Planned for production)
+
+### Scalability
+
+- **Async Architecture**: FastAPI with async/await for high concurrency
+- **Container-Based**: Easy horizontal scaling with Podman/Kubernetes
+- **Vector Store**: Qdrant for efficient semantic search at scale
+- **State Management**: Redis for distributed state synchronization
+
+### Extensibility
+
+- **Provider Abstraction**: Easily swap OpenAI for Gemini or other LLM providers
+- **MCP Protocol**: Plug-and-play knowledge source connectors
+- **Retrieval Profiles**: Configurable context retrieval per agent
+- **Custom Parsers**: Add new file format parsers without changing core logic
+
+---
+
+## 🧪 Testing & Validation
+
+### Run Backend Tests
+
+```bash
 cd backend
-.\start-containers-simple.ps1
+pytest -v
+```
 
-# Terminal 2: Start backend
-cd backend
-.\venv\Scripts\activate
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+### Run Frontend Tests
 
-# Terminal 3: Start frontend
+```bash
 cd frontend
-npm run dev
+npm test
 ```
 
-**Stop everything:**
-```powershell
-# Stop backend: Ctrl+C in backend terminal
-# Stop frontend: Ctrl+C in frontend terminal
+### Manual Testing Checklist
 
-# Stop containers
-cd backend
-.\stop-containers.ps1
-```
+- [ ] Create project and upload files
+- [ ] Start workflow and verify context retrieval
+- [ ] Check extracted facts for accuracy
+- [ ] Review generated questionnaires
+- [ ] Validate intake draft completeness
+- [ ] Approve intake and generate migration plan
+- [ ] Verify LangSmith traces are captured
 
-### 🐛 Troubleshooting
+---
 
-**Backend won't start:**
-- Check if virtual environment is activated
-- Verify all dependencies: `pip list`
-- Check .env file has required API keys
-- Check port 8000 is not in use: `netstat -ano | findstr :8000`
+## 🐛 Troubleshooting
 
-**Containers won't start:**
-- Verify Podman Desktop is running
-- Check if ports are available: `netstat -ano | findstr :6379` and `netstat -ano | findstr :6333`
-- Try: `podman system prune -a` (removes all containers and images)
-
-**Frontend won't start:**
-- Check Node.js version: `node --version` (should be 18+)
-- Delete node_modules and reinstall: `rm -rf node_modules && npm install`
-- Check port 5173 is not in use
-
-**API calls failing:**
-- Verify backend is running: http://localhost:8000/health
-- Check browser console for CORS errors
-- Verify .env has correct API keys
-
-### Option 1: Quick Start (Windows)
-
-**First Time Setup:**
-```cmd
-# Run setup script (one-time)
-dev-setup.cmd
-
-# Edit backend\.env and add your API keys
-notepad backend\.env
-```
-
-**Start Development Server:**
-```cmd
-# Run this every time you want to start the server
-dev-run.cmd
-```
-
-The server will be available at:
-- API: http://localhost:8000
-- Docs: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
-
-### Option 2: Manual Setup (All Platforms)
-
-**1. Clone and Setup**
-```bash
-# Clone repository
-git clone <repository-url>
-cd mig-26
-
-# Copy environment template
-cp backend/.env.example backend/.env
-
-# Edit .env with your API keys
-```
-
-**2. Backend Setup**
-```bash
-cd backend
-
-# Create virtual environment
-python -m venv venv
-
-# Activate virtual environment
-# Windows:
-venv\Scripts\activate
-# Linux/Mac:
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run import test
-python test_imports.py
-
-# Start development server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-### 3. Container Setup (Podman)
+### Containers Not Starting
 
 ```bash
-# Build and start all services
-podman-compose up -d
+# Check Podman status
+podman ps -a
 
-# View logs
-podman-compose logs -f backend
+# View container logs
+podman logs <container-id>
 
-# Stop services
+# Restart containers
 podman-compose down
+podman-compose up -d
 ```
 
-### 4. Verify Installation
+### Backend Connection Issues
 
 ```bash
-# Check API health
-curl http://localhost:8000/health
+# Verify Redis connection
+python backend/check_redis.ps1
 
-# Check provider health
-curl http://localhost:8000/health/providers
-
-# View API documentation
-open http://localhost:8000/docs
+# Check backend logs
+# Look for startup errors in terminal running uvicorn
 ```
 
-## 🔧 Configuration
-
-### Environment Variables
-
-Key configuration options (see `.env.example` for full list):
+### Frontend Not Loading
 
 ```bash
-# Application
-ENVIRONMENT=development
-LOG_LEVEL=INFO
+# Clear npm cache
+npm cache clean --force
 
-# LLM Providers
-PRIMARY_PROVIDER=openai
-FALLBACK_PROVIDER=gemini
-OPENAI_API_KEY=your-key
-GEMINI_API_KEY=your-key
+# Reinstall dependencies
+rm -rf node_modules package-lock.json
+npm install
 
-# LangSmith Tracing
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your-key
-LANGCHAIN_PROJECT=migration-copilot-poc
-
-# MCP Connector
-MCP_BASE_URL=https://your-domain.atlassian.net/wiki
-MCP_BEARER_TOKEN=your-token
+# Check for port conflicts
+netstat -ano | findstr :5173  # Windows
+lsof -i :5173                 # Linux/Mac
 ```
 
-## 📊 Agent Architecture
+### LangSmith Traces Not Appearing
 
-### Supervisor-Led Workflow
+1. Verify `LANGSMITH_API_KEY` is set in `.env`
+2. Check `LANGSMITH_PROJECT` matches your LangSmith project name
+3. Ensure `LANGCHAIN_TRACING_V2=true` in `.env`
+4. Check backend logs for LangSmith connection errors
 
-The system uses a **supervisor-led LangGraph workflow** with 7 specialized agents:
+---
 
-1. **Orchestrator/Supervisor** - Controls workflow and state transitions
-2. **Context Retrieval Agent** - Fetches context from MCP
-3. **Extraction Agent** - Extracts technical facts
-4. **Questionnaire Agent** - Identifies gaps and generates questions
-5. **Intake Draft Agent** - Creates structured intake document
-6. **Review/Validation Agent** - Validates completeness and consistency
-7. **Migration Planning Agent** - Generates migration strategy and plan
+## 📚 Documentation
 
-### State Management
+Comprehensive documentation is available in the `docs/` directory:
 
-**Transactional ACID Properties:**
-- **Atomicity**: All-or-nothing commits with exclusive locks
-- **Consistency**: Schema validation and phase transition rules
-- **Isolation**: Single writer lock with optimistic locking
-- **Durability**: Checkpoints and write-ahead logging
+- **Architecture Overview**: `docs/00-architecture-overview.md`
+- **Phase-Wise Implementation**: `docs/phase-wise/`
+- **Workflow Details**: `docs/workflow/`
+- **Fix Documentation**: `docs/fixes/`
+- **Observability Setup**: `docs/11-observability-stack.md`
 
-## 🧪 Testing
-
-```bash
-cd backend
-
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=app --cov-report=html
-
-# Run specific test file
-pytest tests/test_config.py
-
-# Run with markers
-pytest -m unit
-pytest -m integration
-```
-
-## 📈 Observability
-
-### LangSmith Tracing
-
-Every operation is traced:
-- MCP requests
-- LLM calls
-- Agent executions
-- State transitions
-- Validation steps
-
-Access traces at: https://smith.langchain.com
-
-### Metrics (Future)
-
-Prometheus metrics exposed at `/metrics`:
-- Request latency
-- Provider health
-- Token usage
-- Error rates
-
-## 🔐 Security
-
-- Non-root container user
-- API key validation
-- CORS configuration
-- Input validation with Pydantic
-- Rate limiting (future)
-
-## 📝 Development Phases
-
-- ✅ **Phase 1**: Foundation (Configuration, Providers, Tracing)
-- 🚧 **Phase 2**: MCP Connector
-- 🚧 **Phase 3**: LangGraph Orchestration
-- 🚧 **Phase 4**: Core Agents
-- 🚧 **Phase 5**: Intake & Review
-- 🚧 **Phase 6**: Migration Planning
-- 🚧 **Phase 7**: Frontend UI
-- 🚧 **Phase 8**: Deployment & Observability
-
-## 🤝 Contributing
-
-This is a POC project. For production use:
-1. Add authentication/authorization
-2. Implement rate limiting
-3. Add comprehensive error handling
-4. Set up CI/CD pipelines
-5. Add monitoring and alerting
-6. Implement data persistence
-7. Add audit logging
-
-## 📄 License
-
-[Your License Here]
-
-## 🆘 Support
-
-For issues and questions:
-- Check documentation in `docs/`
-- Review API docs at `/docs`
-- Check LangSmith traces for debugging
+---
 
 ## 🎯 Success Criteria
 
-The POC is successful if:
-- ✅ MCP retrieval is configurable and plug-and-play
-- ✅ Agents can request different context slices through profiles
-- ✅ State transitions are deterministic and traceable
-- ✅ Shared state updates are transaction-like and safe
-- ✅ LangSmith clearly shows workflow execution
-- ✅ Intake draft can be created and reviewed
-- ✅ Migration plan can be generated from reviewed intake
-- ✅ UI and backend feel coherent and demo-ready
+This POC demonstrates:
+
+✅ **Plug-and-Play Knowledge Retrieval**: MCP connector supports multiple sources with configurable profiles  
+✅ **Intelligent Agent Orchestration**: 7 specialized agents with clear boundaries and responsibilities  
+✅ **Transaction-Style State Management**: LangGraph reducers ensure deterministic, traceable state updates  
+✅ **Human-in-the-Loop Review**: Intuitive UI for reviewing and approving AI-generated content  
+✅ **Transparent Execution**: LangSmith tracing shows complete decision-making process  
+✅ **Enterprise UI/UX**: IBM Carbon Design System for familiar, trustworthy interface  
+✅ **Multi-Provider Support**: OpenAI primary, Gemini fallback with common abstraction  
+
+---
+
+## 🚧 Known Limitations (POC Scope)
+
+- **In-Memory Storage**: State and vectors are ephemeral (production would use persistent databases)
+- **Single-User**: No authentication or multi-tenancy (production-ready architecture documented)
+- **Limited Migration Planning**: Phase 6 agent is placeholder (full implementation planned)
+- **Dependency Vulnerabilities**: 43 third-party package vulnerabilities (acceptable for POC, remediation plan documented)
+
+---
+
+## 🔮 Future Enhancements
+
+### Phase 6: Migration Planning Agent (In Progress)
+- Complete migration strategy recommendation engine
+- Cloud infrastructure cost estimation
+- Detailed phased execution plans with timelines
+
+### Phase 8: End-to-End Testing & Demo
+- Comprehensive integration tests
+- Demo scenarios with sample projects
+- Performance benchmarking
+
+### Production Readiness
+- Persistent database (PostgreSQL)
+- Persistent vector store (Qdrant Cloud)
+- Authentication & authorization (OAuth2/OIDC)
+- Multi-tenancy support
+- Dependency vulnerability remediation
+- Kubernetes deployment manifests
+
+---
+
+## 📞 Support & Contribution
+
+For questions, issues, or contributions:
+
+1. Check existing documentation in `docs/`
+2. Review troubleshooting section above
+3. Check LangSmith traces for workflow debugging
+4. Contact the development team
+
+---
+
+## 📄 License
+
+[Add your license information here]
+
+---
+
+## 🙏 Acknowledgments
+
+Built with:
+- **LangGraph** for agent orchestration
+- **LangSmith** for observability
+- **IBM Carbon Design System** for enterprise UI
+- **FastAPI** for high-performance backend
+- **OpenAI** and **Google Gemini** for LLM capabilities
+
+---
+
+**IBM Migration Copilot** - Transforming Application Modernization Through Intelligent Automation 🚀
