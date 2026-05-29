@@ -99,12 +99,270 @@ mig-26/
 
 ### Prerequisites
 
-- Python 3.10+
-- Podman or Docker (optional, for containerized deployment)
-- OpenAI API key
-- (Optional) Google Gemini API key
-- (Optional) LangSmith API key
-- (Optional) Confluence Cloud access
+**System Requirements:**
+- Python 3.10 or higher
+- Node.js 18+ and npm (for frontend)
+- Podman Desktop (recommended) or Docker Desktop
+- Git
+- Windows PowerShell (for Windows users)
+
+**Required API Keys:**
+- OpenAI API key (primary LLM provider)
+- Google Gemini API key (fallback LLM provider)
+
+**Optional:**
+- LangSmith API key (for tracing and observability)
+- Confluence Cloud access (for MCP connector)
+
+### 🎯 Complete Startup Guide (Recommended)
+
+Follow these steps in order for a smooth setup:
+
+#### Step 1: System Prerequisites
+
+**Install Podman Desktop:**
+1. Download from: https://podman-desktop.io/downloads
+2. Install and launch Podman Desktop
+3. Verify installation:
+   ```powershell
+   podman --version
+   podman-compose --version
+   ```
+
+**Install Python 3.10+:**
+1. Download from: https://www.python.org/downloads/
+2. During installation, check "Add Python to PATH"
+3. Verify:
+   ```powershell
+   python --version
+   ```
+
+**Install Node.js 18+:**
+1. Download from: https://nodejs.org/
+2. Install LTS version
+3. Verify:
+   ```powershell
+   node --version
+   npm --version
+   ```
+
+#### Step 2: Clone and Configure
+
+```powershell
+# Clone the repository
+git clone <repository-url>
+cd mig-26
+
+# Copy environment template
+cp backend/.env.example backend/.env
+
+# Edit .env file and add your API keys
+notepad backend/.env
+```
+
+**Required Environment Variables:**
+```bash
+# LLM Providers (REQUIRED)
+OPENAI_API_KEY=sk-your-openai-key-here
+GEMINI_API_KEY=your-gemini-key-here
+
+# Application Settings
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+PRIMARY_PROVIDER=openai
+FALLBACK_PROVIDER=gemini
+
+# Optional: LangSmith Tracing
+LANGCHAIN_TRACING_V2=false
+LANGCHAIN_API_KEY=your-langsmith-key
+LANGCHAIN_PROJECT=migration-copilot-poc
+
+# Optional: MCP Connector (Confluence)
+MCP_BASE_URL=https://your-domain.atlassian.net/wiki
+MCP_BEARER_TOKEN=your-confluence-token
+```
+
+#### Step 3: Backend Setup
+
+**Run the setup script (Windows):**
+```powershell
+cd backend
+.\setup-podman.ps1
+```
+
+This script will:
+- Create Python virtual environment
+- Install all dependencies
+- Verify imports
+- Set up Podman containers (Redis, Qdrant)
+
+**Or manually:**
+```powershell
+cd backend
+
+# Create virtual environment
+python -m venv venv
+
+# Activate virtual environment
+.\venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Verify installation
+python -c "import fastapi; import langchain; print('✓ All imports successful')"
+```
+
+#### Step 4: Start Infrastructure Containers
+
+**Start Redis and Qdrant:**
+```powershell
+cd backend
+.\start-containers-simple.ps1
+```
+
+This will start:
+- **Redis** on `localhost:6379` (state management)
+- **Qdrant** on `localhost:6333` (vector storage)
+
+**Verify containers are running:**
+```powershell
+podman ps
+```
+
+You should see:
+```
+CONTAINER ID  IMAGE                              STATUS      PORTS
+xxxxx         docker.io/library/redis:7-alpine   Up          0.0.0.0:6379->6379/tcp
+xxxxx         docker.io/qdrant/qdrant:latest     Up          0.0.0.0:6333->6333/tcp
+```
+
+#### Step 5: Start Backend Server
+
+```powershell
+cd backend
+
+# Activate virtual environment (if not already activated)
+.\venv\Scripts\activate
+
+# Start FastAPI server
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+**Expected output:**
+```
+INFO:     Started server process [xxxxx]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://127.0.0.1:8000
+```
+
+**Verify backend is running:**
+- API Health: http://localhost:8000/health
+- API Docs: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
+
+#### Step 6: Start Frontend
+
+**Open a new terminal:**
+```powershell
+cd frontend
+
+# Install dependencies (first time only)
+npm install
+
+# Start development server
+npm run dev
+```
+
+**Expected output:**
+```
+VITE v5.x.x  ready in xxx ms
+
+➜  Local:   http://localhost:5173/
+➜  Network: use --host to expose
+```
+
+**Access the application:**
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+
+#### Step 7: Verify Complete Setup
+
+**Test the full stack:**
+
+1. **Check Backend Health:**
+   ```powershell
+   curl http://localhost:8000/health
+   ```
+   Expected: `{"status":"healthy"}`
+
+2. **Check Provider Health:**
+   ```powershell
+   curl http://localhost:8000/health/providers
+   ```
+   Expected: Provider status with OpenAI/Gemini health
+
+3. **Check Frontend:**
+   - Open http://localhost:5173
+   - You should see the Migration Copilot dashboard
+
+4. **Check Containers:**
+   ```powershell
+   podman ps
+   ```
+   Expected: Redis and Qdrant running
+
+### 🔄 Daily Development Workflow
+
+**Start everything:**
+```powershell
+# Terminal 1: Start containers
+cd backend
+.\start-containers-simple.ps1
+
+# Terminal 2: Start backend
+cd backend
+.\venv\Scripts\activate
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# Terminal 3: Start frontend
+cd frontend
+npm run dev
+```
+
+**Stop everything:**
+```powershell
+# Stop backend: Ctrl+C in backend terminal
+# Stop frontend: Ctrl+C in frontend terminal
+
+# Stop containers
+cd backend
+.\stop-containers.ps1
+```
+
+### 🐛 Troubleshooting
+
+**Backend won't start:**
+- Check if virtual environment is activated
+- Verify all dependencies: `pip list`
+- Check .env file has required API keys
+- Check port 8000 is not in use: `netstat -ano | findstr :8000`
+
+**Containers won't start:**
+- Verify Podman Desktop is running
+- Check if ports are available: `netstat -ano | findstr :6379` and `netstat -ano | findstr :6333`
+- Try: `podman system prune -a` (removes all containers and images)
+
+**Frontend won't start:**
+- Check Node.js version: `node --version` (should be 18+)
+- Delete node_modules and reinstall: `rm -rf node_modules && npm install`
+- Check port 5173 is not in use
+
+**API calls failing:**
+- Verify backend is running: http://localhost:8000/health
+- Check browser console for CORS errors
+- Verify .env has correct API keys
 
 ### Option 1: Quick Start (Windows)
 
