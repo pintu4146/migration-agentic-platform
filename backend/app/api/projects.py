@@ -5,11 +5,13 @@ Manages project discovery and metadata by querying Qdrant collections.
 """
 
 import logging
+import re
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..storage.qdrant_store import QdrantStore
+from ..models.schemas import ProjectCreateRequest, ProjectResponse
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +26,27 @@ async def get_qdrant_store() -> QdrantStore:
     return store
 
 
+def sanitize_project_name(name: str) -> str:
+    """
+    Sanitize project name to create valid project ID.
+    
+    Args:
+        name: Raw project name
+        
+    Returns:
+        Sanitized project ID (lowercase, alphanumeric + hyphens)
+    """
+    # Convert to lowercase
+    project_id = name.lower()
+    # Replace spaces and special chars with hyphens
+    project_id = re.sub(r'[^a-z0-9-_]', '-', project_id)
+    # Remove duplicate hyphens
+    project_id = re.sub(r'-+', '-', project_id)
+    # Remove leading/trailing hyphens
+    project_id = project_id.strip('-')
+    return project_id
+
+
 class ProjectInfo(BaseModel):
     """Project information"""
     id: str
@@ -36,6 +59,78 @@ class ProjectListResponse(BaseModel):
     """Response for project list"""
     projects: List[ProjectInfo]
     total: int
+
+
+@router.post("/create", response_model=ProjectResponse)
+async def create_project(
+    request: ProjectCreateRequest,
+    qdrant_store: QdrantStore = Depends(get_qdrant_store)
+) -> ProjectResponse:
+    """
+    Create a new project with Qdrant collection.
+    
+    Args:
+        request: Project creation request with name and optional description
+        
+    Returns:
+        Created project information
+    """
+    
+    try:
+        # Validate and sanitize project name
+        if not request.name or len(request.name.strip()) < 3:
+            raise HTTPException(
+                status_code=400,
+                detail="Project name must be at least 3 characters long"
+            )
+        
+        # Sanitize project name to create project ID
+        project_id = sanitize_project_name(request.name)
+        
+        if not project_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Project name contains only invalid characters"
+            )
+        
+        collection_name = f"project_{project_id}"
+        
+        logger.info(f"Creating project: {project_id} (collection: {collection_name})")
+        
+        # Check if collection already exists
+        collections_response = qdrant_store.client.get_collections()
+        existing_collections = [c.name for c in collections_response.collections]
+        
+        if collection_name in existing_collections:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Project '{project_id}' already exists"
+            )
+        
+        # Create Qdrant collection for the project
+        await qdrant_store.create_collection(
+            collection_name=collection_name,
+            vector_size=768,  # Default for sentence transformers
+        )
+        
+        logger.info(f"Successfully created project: {project_id}")
+        
+        return ProjectResponse(
+            project_id=project_id,
+            name=request.name,
+            description=request.description,
+            phase="init",
+            state_version=0
+        )
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create project: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create project: {str(e)}"
+        )
 
 
 @router.get("/list", response_model=ProjectListResponse)

@@ -96,6 +96,14 @@ export const retrieveContext = async (projectId, profile = 'extraction_profile')
 };
 
 // Projects API
+export const createProject = async (name, description = null) => {
+  const response = await api.post('/api/projects/create', {
+    name,
+    description
+  });
+  return response.data;
+};
+
 export const listProjects = async () => {
   const response = await api.get('/api/projects/list');
   return response.data;

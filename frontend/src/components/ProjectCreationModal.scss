@@ -1,0 +1,22 @@
+.project-creation-form {
+  padding: 1rem 0;
+
+  .cds--text-input,
+  .cds--text-area {
+    margin-bottom: 0;
+  }
+
+  .character-count {
+    text-align: right;
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--cds-text-secondary, #6f6f6f);
+  }
+
+  .cds--inline-notification {
+    margin-bottom: 1rem;
+    max-width: 100%;
+  }
+}
+
+// Made with Bob

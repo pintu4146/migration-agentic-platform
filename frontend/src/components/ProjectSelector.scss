@@ -1,6 +1,16 @@
 .project-selector {
   margin-bottom: 1rem;
-  
+
+  .project-selector-header {
+    margin-bottom: 1rem;
+    display: flex;
+    justify-content: flex-start;
+    
+    .cds--btn {
+      min-width: 180px;
+    }
+  }
+
   .cds--dropdown {
     width: 100%;
   }
