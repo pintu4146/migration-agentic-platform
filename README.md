@@ -2,7 +2,7 @@
 
 > **Intelligent Application Modernization — from scattered legacy docs to a cloud migration plan, in hours not weeks.**
 
-> **Latest**: Advanced Assistance Service planned at the Human Review gate — a Chain-of-Thought conversational assistant that reasons over extracted facts, searches project documents, and generates diagnostic commands when more context is needed. See [`docs/ADVANCED_ASSISTANCE_PLAN.md`](docs/ADVANCED_ASSISTANCE_PLAN.md).
+> **Latest**: Advanced Assistance Service **shipped** as a standalone SOA microservice at `:8001` — a Chain-of-Thought conversational assistant that reasons over extracted facts, searches project documents, and generates diagnostic commands. Frontend components (`AssistancePanel`, `ChatDrawer`) and service layer (`assistanceApi.js`, `useAssistance.js`) are live. See [`docs/ADVANCED_ASSISTANCE_PLAN.md`](docs/ADVANCED_ASSISTANCE_PLAN.md).
 
 ---
 
@@ -27,40 +27,37 @@ The entire pipeline is orchestrated by a **LangGraph supervisor-led multi-agent 
 ### High-Level System Overview
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│  Browser (React + IBM Carbon)                                    │
-│  :3000  ──SSE──▶  Workflow live updates                         │
-│         ──REST─▶  /api/orchestration, /api/projects, /api/docs  │
-└──────────────────────────────┬───────────────────────────────────┘
-                               │
-┌──────────────────────────────▼───────────────────────────────────┐
-│  FastAPI  :8000                                                  │
-│  ┌─────────────────────────────────────────────────────────┐    │
-│  │  WorkflowOrchestrator  (LangGraph StateGraph)           │    │
-│  │                                                         │    │
-│  │  [supervisor] ──▶ [context_retrieval] ──▶ [extraction] │    │
-│  │       ▲                                        │        │    │
-│  │       └──────────────────────────────────◀────┘        │    │
-│  │       ▼                                                 │    │
-│  │  [questionnaire] ──▶ [intake_draft] ──▶ [validation]   │    │
-│  │                                               │         │    │
-│  │                                    ──▶ [human_review]  │    │
-│  │                                        (pause → END)   │    │
-│  │                                               │(resume) │    │
-│  │                                    ──▶ [migration_plan] │    │
-│  │                                    ──▶ [complete]       │    │
-│  └─────────────────────────────────────────────────────────┘    │
-│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────────┐  │
-│  │ StateManager │  │ContextRetrvr │  │ LLM ProviderFactory   │  │
-│  │ (Redis sync) │  │ (MCP→Qdrant) │  │ (OpenAI / Gemini)     │  │
-│  └──────────────┘  └──────────────┘  └───────────────────────┘  │
-└──────┬──────────────────┬────────────────────────────────────────┘
-       │                  │
-  ┌────▼────┐        ┌────▼────┐
-  │  Redis  │        │ Qdrant  │
-  │  :6379  │        │  :6333  │
-  │ (state) │        │(vectors)│
-  └─────────┘        └─────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│  Browser (React + IBM Carbon)  :3000                                 │
+│  ──SSE──▶  Workflow live updates (/api/orchestration/stream)         │
+│  ──REST─▶  /api/orchestration, /api/projects, /api/documents         │
+│  ──SSE──▶  Assistance chat stream (/api/assistance/chat)             │
+└──────────────┬────────────────────────────────────┬──────────────────┘
+               │  Vite proxy /api/*                  │  Vite proxy /api/assistance/*
+               ▼                                     ▼
+┌──────────────────────────────┐   ┌─────────────────────────────────────┐
+│  FastAPI  :8000 (Main)        │   │  FastAPI  :8001 (Assistance Service) │
+│  ┌────────────────────────┐  │   │  ┌──────────────────────────────┐   │
+│  │  WorkflowOrchestrator  │  │   │  │  AssistantAgent (4-step CoT) │   │
+│  │  (LangGraph StateGraph)│  │   │  │  ContextRetriever            │   │
+│  │                        │  │   │  │  CommandGenerator            │   │
+│  │  [supervisor]          │  │   │  │  ConversationStore (Redis)   │   │
+│  │  [context_retrieval]   │  │   │  └──────────────────────────────┘   │
+│  │  [extraction]          │  │   │  HTTP ──▶ :8000 for state reads     │
+│  │  [questionnaire]       │  │   │  Direct ──▶ Qdrant for vectors      │
+│  │  [intake_draft]        │  │   └────────────────────────┬────────────┘
+│  │  [validation]          │  │                            │
+│  │  [human_review] (pause)│  │                            │
+│  │  [migration_plan]      │  │                            │
+│  └────────────────────────┘  │                            │
+│  StateManager  │  LLM Factory│                            │
+└──────┬─────────┴─────────────┘                            │
+       │                                                     │
+  ┌────▼────┐        ┌─────────────────────────────────────▼─┐
+  │  Redis  │        │ Qdrant  :6333                          │
+  │  :6379  │        │ project_{id} (docs + user context)     │
+  │ (state) │        │ assistance:{id}:history  (chat store)  │
+  └─────────┘        └───────────────────────────────────────┘
 ```
 
 ### Agent Roster
@@ -74,7 +71,7 @@ The entire pipeline is orchestrated by a **LangGraph supervisor-led multi-agent 
 | **Intake Draft** | `agents/intake_draft_agent.py` | Produces structured intake document from extracted facts |
 | **Review/Validation** | `agents/review_validation_agent.py` | Checks for contradictions, unsupported claims, completeness |
 | **Migration Planning** | `orchestration/workflow.py` node | *(Phase 6 — scaffolding only)* Cloud strategy recommendations |
-| **Advanced Assistance** | `app/assistance/` *(planned)* | CoT conversational assistant at Human Review gate — layered context lookup, LLM-powered command generation, per-project Redis chat history |
+| **Advanced Assistance** | `backend/assistance/app/` ✅ **live** | Standalone SOA microservice (:8001) — 4-step CoT orchestrator, layered context lookup, LLM-powered command generation, per-project Redis chat history |
 
 ### State Machine
 
@@ -190,7 +187,17 @@ npm run dev
 
 UI available at **`http://localhost:3000`** (not 5173 — port is overridden in `vite.config.js`)
 
-### 5. Run Your First Migration Analysis
+### 5. Assistance Service *(optional — enables chat at Human Review)*
+
+```bash
+# From backend/assistance/ — in a new terminal
+pip install -r requirements.txt
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+> The Vite proxy at `/api/assistance/*` routes to `:8001` automatically — no frontend changes needed.
+
+### 6. Run Your First Migration Analysis
 
 1. Open `http://localhost:3000`
 2. **Dashboard → Create New Project** — enter a name and description
@@ -199,7 +206,7 @@ UI available at **`http://localhost:3000`** (not 5173 — port is overridden in 
 5. Watch real-time phase progression via SSE (⚡ Live Updates indicator)
 6. At `human_review`, the workflow pauses automatically — click "Go to Review"
 7. Review extracted facts, validation results, and review flags
-8. *(Planned)* Use **Advanced Assistance** chat panel to ask questions about the extracted facts, request diagnostic commands, or upload additional context files
+8. Use the **Advanced Assistance** chat panel (requires `:8001` running) to ask questions about extracted facts, request diagnostic commands, or upload additional context files
 9. **Approve** the intake draft to trigger migration planning
 
 ---
@@ -249,7 +256,7 @@ FALLBACK_PROVIDER=gemini   # or openai, or empty to disable fallback
 
 ## Advanced Assistance Service
 
-The **Advanced Assistance Service** is a planned Chain-of-Thought (CoT) conversational assistant embedded at the Human Review pause point, built as a **standalone SOA microservice** (separate FastAPI app, own port `:8001`, own `Dockerfile`). Full specification: [`docs/ADVANCED_ASSISTANCE_PLAN.md`](docs/ADVANCED_ASSISTANCE_PLAN.md).
+The **Advanced Assistance Service** is a **shipped** Chain-of-Thought (CoT) conversational assistant embedded at the Human Review pause point, built as a **standalone SOA microservice** (separate FastAPI app, own port `:8001`, own `Dockerfile`). Full specification: [`docs/ADVANCED_ASSISTANCE_PLAN.md`](docs/ADVANCED_ASSISTANCE_PLAN.md).
 
 ### What It Does
 
@@ -288,19 +295,20 @@ The service is deployed independently from the main backend — its own process,
 │  /api/*            ──▶ Vite proxy ──▶ Main Backend        :8000     │
 └──────────────────────────────────────────────────────────────────────┘
 
-backend/assistance/                    ← Standalone service directory
+backend/assistance/                    ← Standalone service (shipped ✅)
 ├── app/
 │   ├── main.py                        ← Own FastAPI app, uvicorn port 8001
 │   ├── api/
-│   │   ├── chat.py                    ← QUERY /chat/{project_id} → SSE stream
-│   │   ├── context.py                 ← POST  /context/{project_id}
+│   │   ├── chat.py                    ← POST/QUERY /chat/{project_id} → SSE stream
+│   │   ├── context.py                 ← POST /context/{project_id}
 │   │   └── history.py                 ← GET / DELETE /history/{project_id}
-│   ├── assistant_agent.py             ← 4-step CoT orchestrator + SSE streaming
+│   ├── react_agent.py                 ← 4-step CoT orchestrator + SSE streaming
 │   ├── context_retriever.py           ← Layered lookup: state HTTP call → Qdrant
 │   ├── command_generator.py           ← LLM-powered diagnostic commands
 │   ├── conversation_store.py          ← Per-project Redis chat history
 │   └── prompts.py                     ← System prompts + prompt builders
 ├── requirements.txt                   ← Own dependency set (lighter than main)
+├── tests/                             ← Service-level tests
 └── Dockerfile                         ← Own container image
 ```
 
@@ -457,6 +465,19 @@ Sub-Task 9 → Integration tests          (end-to-end across both services + doc
 |--------|------|-------------|
 | `GET` | `/mcp/health` | MCP gateway connectivity |
 | `POST` | `/mcp/retrieve` | `{project_id, profile}` direct context retrieval |
+| `GET` | `/mcp/profiles` | List all predefined retrieval profiles |
+| `GET` | `/mcp/profiles/{profile_type}` | Get a specific profile configuration |
+| `POST` | `/mcp/profiles/validate` | Validate a custom profile configuration |
+
+### Assistance Service *(`:8001` — proxied via `/api/assistance/*`)*
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/assistance/chat/{project_id}` | `{question: str}` → `text/event-stream` of CoT steps + answer chunks |
+| `POST` | `/api/assistance/context/{project_id}` | Ingest command output (text) or file upload into Qdrant |
+| `GET` | `/api/assistance/history/{project_id}` | Full per-project conversation history |
+| `DELETE` | `/api/assistance/history/{project_id}` | Clear conversation history |
+| `GET` | `/api/assistance/context/{project_id}` | List user-provided context documents |
 
 ---
 
@@ -689,12 +710,16 @@ The Vite dev server is configured for port **3000** in `vite.config.js`, not the
 
 | Item | Status | Reference |
 |------|--------|-----------|
-| **Advanced Assistance Service** | 🚧 Planned (9 sub-tasks) | [`docs/ADVANCED_ASSISTANCE_PLAN.md`](docs/ADVANCED_ASSISTANCE_PLAN.md) |
+| **Advanced Assistance Service** | ✅ **Shipped** — sub-tasks 1–7 complete | [`docs/ADVANCED_ASSISTANCE_PLAN.md`](docs/ADVANCED_ASSISTANCE_PLAN.md) |
+| **Assistance Prompt Engineering** | ⏳ Sub-task 8 — test scenarios | [`docs/ADVANCED_ASSISTANCE_PLAN.md`](docs/ADVANCED_ASSISTANCE_PLAN.md) |
+| **Assistance Integration Tests** | ⏳ Sub-task 9 — e2e tests | [`docs/ADVANCED_ASSISTANCE_PLAN.md`](docs/ADVANCED_ASSISTANCE_PLAN.md) |
 | **Phase 6 — Migration Planning** | ⏳ Scaffolding only | [`docs/06-phase6-migration-planning.md`](docs/06-phase6-migration-planning.md) |
 | **Phase 7 — UI Enhancements** | ⏳ Spec written | [`docs/07-phase7-frontend-ui.md`](docs/07-phase7-frontend-ui.md) |
 | **Phase 8 — Testing & Demo** | ⏳ Spec written | [`docs/08-phase8-testing-demo.md`](docs/08-phase8-testing-demo.md) |
 | **AWS Bedrock Migration** | 📚 POC plan ready | [`docs/AWS_BEDROCK_POC_PLAN.md`](docs/AWS_BEDROCK_POC_PLAN.md) |
+| **Interview Prep Docs** | ✅ **Shipped** — 10 documents | [`docs/interview-prep/`](docs/interview-prep/) |
 | **Production hardening** | ⏳ Planned | PostgreSQL, Qdrant Cloud, OAuth2/OIDC, Kubernetes |
+
 
 ---
 
@@ -706,13 +731,6 @@ mig-26/
 │   ├── app/
 │   │   ├── agents/          # 5 specialized agent modules
 │   │   ├── api/             # FastAPI routers (orchestration, documents, projects, mcp)
-│   │   │                    #   + assistance.py (planned — /api/assistance)
-│   │   ├── assistance/      # (planned) CoT assistant service
-│   │   │   ├── assistant_agent.py      # 4-step CoT orchestrator + SSE streaming
-│   │   │   ├── context_retriever.py    # Layered state → Qdrant context lookup
-│   │   │   ├── command_generator.py    # LLM-powered diagnostic command generation
-│   │   │   ├── conversation_store.py   # Per-project Redis chat history
-│   │   │   └── prompts.py              # System prompts + prompt builders
 │   │   ├── mcp/             # IBM Context Studio connector + profiles
 │   │   ├── models/          # Pydantic schemas (schemas.py)
 │   │   ├── orchestration/   # LangGraph workflow, supervisor, state, state_manager
@@ -722,7 +740,22 @@ mig-26/
 │   │   ├── tracing/         # LangSmith integration + @trace_operation decorator
 │   │   ├── config.py        # Pydantic Settings (validates on import)
 │   │   ├── logging_config.py
-│   │   └── main.py          # FastAPI app + lifespan + health endpoints
+│   │   └── main.py          # FastAPI app + lifespan + health endpoints  :8000
+│   ├── assistance/          # ✅ Standalone SOA microservice  :8001
+│   │   ├── app/
+│   │   │   ├── main.py              # Own FastAPI app, own port 8001
+│   │   │   ├── api/
+│   │   │   │   ├── chat.py          # POST /chat/{id} → SSE stream
+│   │   │   │   ├── context.py       # POST /context/{id} — ingest user context
+│   │   │   │   └── history.py       # GET/DELETE /history/{id}
+│   │   │   ├── react_agent.py       # 4-step CoT orchestrator + SSE streaming
+│   │   │   ├── context_retriever.py # Layered state → Qdrant context lookup
+│   │   │   ├── command_generator.py # LLM-powered diagnostic command generation
+│   │   │   ├── conversation_store.py# Per-project Redis chat history
+│   │   │   └── prompts.py           # System prompts + prompt builders
+│   │   ├── tests/                   # Service-level tests
+│   │   ├── requirements.txt         # Own dependency set
+│   │   └── Dockerfile               # Own container image
 │   ├── poc/                 # Standalone POC scripts (AWS Bedrock steps, prompt testing)
 │   ├── tests/               # pytest suite (unit + integration markers)
 │   ├── requirements.txt
@@ -731,25 +764,36 @@ mig-26/
 ├── frontend/
 │   ├── src/
 │   │   ├── components/      # Shared Carbon UI components (+ co-located .scss)
-│   │   │   └── ChatDrawer/  # Slide-in chat drawer prototype (MOCK_MODE flag)
+│   │   │   ├── AssistancePanel/  # CoT chat panel for Human Review ✅
+│   │   │   └── ChatDrawer/       # Slide-in chat drawer (entry point)
 │   │   ├── hooks/           # useWorkflowSSE (primary), useWorkflowPolling (fallback)
+│   │   │                    #   useAssistance.js (assistance service hook) ✅
 │   │   ├── pages/           # Dashboard, DocumentUpload, WorkflowExecution,
 │   │   │                    #   ExtractedFacts, HumanReview (+ co-located .scss)
-│   │   ├── services/api.js  # All HTTP calls — single axios instance
+│   │   ├── services/
+│   │   │   ├── api.js           # All main API calls — single axios instance
+│   │   │   └── assistanceApi.js # Assistance service — streamChat() helper ✅
 │   │   └── utils/           # workflowHelpers.js (phase logic, progress, activity log)
-│   └── vite.config.js       # Port 3000; proxies /api and /mcp to :8000
+│   └── vite.config.js       # Port 3000; proxies /api/assistance→:8001, /api→:8000
 ├── docs/
 │   ├── 00-architecture-overview.md
 │   ├── 01–08-phase*.md              # Phase-by-phase design + implementation guides
-│   ├── ADVANCED_ASSISTANCE_PLAN.md  # CoT assistant — 9-sub-task full spec
-│   ├── AWS_BEDROCK_POC_PLAN.md      # Step-by-step Bedrock migration POC (8 steps, 12 problems)
+│   ├── ADVANCED_ASSISTANCE_PLAN.md  # CoT assistant — full spec
+│   ├── AWS_BEDROCK_POC_PLAN.md      # Step-by-step Bedrock migration POC
 │   ├── ASSISTANCE_ENTRY_POINTS_PLAN.md  # ChatDrawer + FAB implementation record
-│   └── fixes/ workflow/ phase-wise/ # Fix summaries, workflow docs, phase completion notes
-├── .agents/                 # AI agent persistent memory (CRITICAL_BUGS_MEMORY, CODING_STANDARDS, etc.)
+│   ├── interview-prep/              # ✅ 5 YOE interview + API design guides (10 docs)
+│   │   ├── README.md                # Navigation index
+│   │   ├── API-DESIGN.md            # REST API design — scalable patterns
+│   │   ├── TECHNICAL-DEEP-DIVE.md   # State, providers, LangGraph internals
+│   │   ├── SYSTEM-DESIGN-QUESTIONS.md  # 7 complete Q&A
+│   │   ├── QUICK-REFERENCE.md       # 8-pattern cheat sheet
+│   │   └── ...                      # Learning paths, code reference
+│   └── fixes/ workflow/ phase-wise/ # Fix summaries, workflow docs, phase notes
+├── .agents/                 # AI agent persistent memory
 ├── podman-compose.yml       # Root-level compose (Redis + Qdrant)
 ├── .env.example             # All supported env vars with descriptions
-├── onboarding-plan.md       # Agent onboarding — verified phase status, mandatory rules
-└── AGENTS.md                # AI agent guidance (this project's onboarding doc)
+├── AGENTS.md                # AI agent guidance + coding rules
+└── onboarding-plan.md       # Agent onboarding — verified phase status, rules
 ```
 
 ---
