@@ -12,10 +12,12 @@ import {
   InlineNotification,
   Loading
 } from '@carbon/react';
-import { Checkmark, Close } from '@carbon/icons-react';
+import { Checkmark, Close, Chat } from '@carbon/icons-react';
 import IntakeDraftViewer from '../components/IntakeDraftViewer';
 import ValidationResultsViewer from '../components/ValidationResultsViewer';
 import ReviewFlagsDisplay from '../components/ReviewFlagsDisplay';
+import ChatDrawer from '../components/ChatDrawer';
+import AssistancePanel from '../components/AssistancePanel';
 import { resumeWorkflow, getWorkflowState } from '../services/api';
 import './HumanReview.scss';
 
@@ -42,6 +44,7 @@ const HumanReview = () => {
   const [comments, setComments] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   // Load workflow state
   useEffect(() => {
@@ -173,6 +176,13 @@ const HumanReview = () => {
           {!alreadyReviewed && (
             <div className="human-review__header-actions">
               <Button
+                kind="ghost"
+                renderIcon={Chat}
+                onClick={() => setIsChatOpen(true)}
+              >
+                Ask Assistant
+              </Button>
+              <Button
                 kind="secondary"
                 renderIcon={Close}
                 onClick={() => setShowRejectModal(true)}
@@ -225,6 +235,7 @@ const HumanReview = () => {
           <Tab>Review Flags</Tab>
           <Tab>Intake Draft</Tab>
           <Tab>Validation Results</Tab>
+          <Tab>Advanced Assistant</Tab>
         </TabList>
         <TabPanels>
           {/* Review Flags Tab */}
@@ -243,6 +254,11 @@ const HumanReview = () => {
           {/* Validation Results Tab */}
           <TabPanel>
             <ValidationResultsViewer validationResults={validationResults} />
+          </TabPanel>
+
+          {/* Advanced Assistant Tab */}
+          <TabPanel>
+            <AssistancePanel projectId={projectId} />
           </TabPanel>
         </TabPanels>
       </Tabs>
@@ -295,6 +311,23 @@ const HumanReview = () => {
           invalidText="Rejection reason is required"
         />
       </Modal>
+
+      {/* Chat Drawer — slide-in assistant panel */}
+      <ChatDrawer
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
+        projectId={projectId}
+      />
+
+      {/* Floating chat button — always visible bottom-right */}
+      <button
+        className="chat-fab"
+        onClick={() => setIsChatOpen(true)}
+        aria-label="Open assistant chat"
+        title="Ask the Assistant"
+      >
+        <Chat />
+      </button>
     </div>
   );
 };

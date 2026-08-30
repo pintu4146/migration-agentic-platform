@@ -1,0 +1,212 @@
+@use '@carbon/react/scss/spacing' as *;
+@use '@carbon/react/scss/theme' as *;
+@use '@carbon/react/scss/type' as *;
+
+// ─── Backdrop ─────────────────────────────────────────────────────────────────
+.chat-drawer__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 7999;
+}
+
+// ─── Drawer panel ─────────────────────────────────────────────────────────────
+.chat-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  width: 420px;
+  background: #ffffff;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.18);
+  z-index: 8000;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 250ms ease-out;
+
+  &--open {
+    transform: translateX(0);
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+  }
+}
+
+// ─── Header ───────────────────────────────────────────────────────────────────
+.chat-drawer__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: $spacing-05 $spacing-06;
+  background: linear-gradient(135deg, #0f62fe 0%, #0043ce 100%);
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.chat-drawer__title {
+  @include type-style('heading-03');
+  color: #ffffff;
+}
+
+// Override Carbon ghost icon button so it's visible on the blue header
+.chat-drawer__close-btn {
+  color: #ffffff !important;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.12) !important;
+  }
+
+  svg {
+    fill: #ffffff !important;
+  }
+}
+
+// ─── Messages area ────────────────────────────────────────────────────────────
+.chat-drawer__messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: $spacing-05;
+  background: #f4f4f4;
+  display: flex;
+  flex-direction: column;
+  gap: $spacing-04;
+}
+
+.chat-drawer__empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: $spacing-06;
+  text-align: center;
+
+  p {
+    @include type-style('body-01');
+    color: #525252;
+    max-width: 280px;
+    line-height: 1.6;
+  }
+}
+
+// ─── Message bubbles ──────────────────────────────────────────────────────────
+.chat-drawer__message {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+
+  // User: right-aligned blue bubble
+  &--user {
+    align-self: flex-end;
+    align-items: flex-end;
+
+    .chat-drawer__message-text {
+      background: #0f62fe;
+      color: #ffffff;
+      border-radius: 16px 16px 4px 16px;
+      padding: $spacing-03 $spacing-04;
+      @include type-style('body-01');
+    }
+  }
+
+  // Assistant: left-aligned white tile
+  &--assistant {
+    align-self: flex-start;
+    align-items: flex-start;
+    // Allow InlineLoading to render without max-width constraint
+    max-width: 90%;
+
+    .chat-drawer__message-text {
+      background: #ffffff;
+      color: #161616;
+      border-radius: 4px 16px 16px 16px;
+      padding: $spacing-03 $spacing-04;
+      @include type-style('body-01');
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.10);
+      line-height: 1.6;
+    }
+
+    // InlineLoading sits directly inside the assistant bubble slot
+    .cds--inline-loading {
+      padding: $spacing-03 $spacing-04;
+      background: #ffffff;
+      border-radius: 4px 16px 16px 16px;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.10);
+    }
+  }
+}
+
+.chat-drawer__message-time {
+  @include type-style('label-01');
+  color: #8d8d8d;
+  margin-top: $spacing-02;
+  padding: 0 $spacing-03;
+}
+
+// ─── Input bar ────────────────────────────────────────────────────────────────
+.chat-drawer__input-bar {
+  display: flex;
+  gap: $spacing-03;
+  padding: $spacing-04 $spacing-05;
+  background: #ffffff;
+  border-top: 1px solid #e0e0e0;
+  flex-shrink: 0;
+  align-items: flex-end;
+
+  // TextInput fills remaining space
+  .cds--text-input-wrapper {
+    flex: 1;
+    min-width: 0;
+  }
+
+  // Keep Send button from shrinking
+  .cds--btn {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}
+
+// ─── Floating Action Button (FAB) ─────────────────────────────────────────────
+// Rendered in HumanReview.jsx, styles scoped here since ChatDrawer.scss is
+// loaded when ChatDrawer is imported.
+.chat-fab {
+  position: fixed;
+  bottom: 2rem;
+  right: 2rem;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #0f62fe;
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.24);
+  z-index: 7000;
+  transition: background 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+  padding: 0;
+
+  &:hover {
+    background: #0043ce;
+    transform: scale(1.08);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.30);
+  }
+
+  &:active {
+    transform: scale(0.96);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #0f62fe;
+    outline-offset: 3px;
+  }
+
+  svg {
+    width: 24px;
+    height: 24px;
+    fill: #ffffff;
+  }
+}

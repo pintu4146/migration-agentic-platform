@@ -7,6 +7,11 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
+      // ── Assistance service (:8001) must come BEFORE the generic /api rule ──
+      '/api/assistance': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
       '/api': {
         target: 'http://localhost:8000',
         changeOrigin: true,

@@ -1,0 +1,565 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FastAPI Learning Guide — IBM Migration Copilot</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #1f2328;
+    background: #ffffff;
+    padding: 32px 16px 64px;
+  }
+  .page { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #57606a; font-size: 13px; margin-bottom: 32px; }
+  h2 {
+    font-size: 15px; font-weight: 700; margin: 36px 0 12px;
+    padding-bottom: 6px; border-bottom: 2px solid #3b82d4; color: #3b82d4;
+    letter-spacing: 0.4px; text-transform: uppercase;
+  }
+  h3 { font-size: 14px; font-weight: 700; margin: 20px 0 6px; color: #1f2328; }
+  p { margin-bottom: 10px; }
+  code {
+    background: #f7f8fa; border: 1px solid #e5e7eb;
+    border-radius: 4px; padding: 1px 5px;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 12.5px; color: #7c5cd8;
+  }
+  pre {
+    background: #f7f8fa; border: 1px solid #e5e7eb;
+    border-radius: 6px; padding: 14px 16px;
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 12.5px; overflow-x: auto; margin: 8px 0 14px;
+    line-height: 1.55; color: #1f2328;
+  }
+  .tag {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    padding: 1px 7px; border-radius: 12px; margin-right: 4px;
+    letter-spacing: 0.3px;
+  }
+  .tag-file { background: #dbeafe; color: #1d4ed8; }
+  .tag-concept { background: #f3e8ff; color: #6b21a8; }
+  .tag-pattern { background: #dcfce7; color: #166534; }
+  .tag-warn { background: #fff7ed; color: #c2410c; }
+  .card {
+    border: 1px solid #e5e7eb; border-radius: 8px;
+    padding: 14px 16px; margin-bottom: 14px;
+    background: #ffffff;
+  }
+  .card-accent { border-left: 4px solid #3b82d4; }
+  .card-warn { border-left: 4px solid #f59e0b; }
+  .card-purple { border-left: 4px solid #7c5cd8; }
+  .card-green { border-left: 4px solid #16a34a; }
+  .qa-q { font-weight: 700; color: #1f2328; margin-bottom: 4px; }
+  .qa-a { color: #374151; padding-left: 12px; border-left: 3px solid #e5e7eb; }
+  .qa-a code { color: #7c5cd8; }
+  .toc { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 18px; margin-bottom: 32px; }
+  .toc ul { list-style: none; columns: 2; column-gap: 24px; }
+  .toc li { padding: 2px 0; font-size: 13px; }
+  .toc li::before { content: "→ "; color: #3b82d4; }
+  table { width: 100%; border-collapse: collapse; margin: 10px 0 16px; font-size: 13px; }
+  th { background: #f7f8fa; text-align: left; padding: 7px 10px; border: 1px solid #e5e7eb; font-weight: 600; }
+  td { padding: 7px 10px; border: 1px solid #e5e7eb; vertical-align: top; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .divider { height: 1px; background: #e5e7eb; margin: 28px 0; }
+  footer { text-align: center; font-size: 12px; color: #57606a; padding-top: 20px; border-top: 1px solid #e5e7eb; margin-top: 40px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <h1>FastAPI Learning Guide</h1>
+  <p class="subtitle">IBM Migration Copilot · Grounded in the actual codebase at <code>backend/app/</code></p>
+
+  <div class="toc">
+    <strong style="font-size:13px">Contents</strong>
+    <ul>
+      <li>Application Bootstrap &amp; Lifespan</li>
+      <li>CORS Middleware</li>
+      <li>Exception Handlers</li>
+      <li>Pydantic v2 Schemas</li>
+      <li>Dependency Injection</li>
+      <li>Router / APIRouter</li>
+      <li>Path &amp; Query Params</li>
+      <li>File Upload</li>
+      <li>SSE Streaming</li>
+      <li>Settings &amp; Config</li>
+      <li>Structured Logging</li>
+      <li>Interview Q&amp;A</li>
+    </ul>
+  </div>
+
+  
+  <h2>1 · Application Bootstrap &amp; Lifespan</h2>
+  <p>
+    <span class="tag tag-file">main.py</span>
+    FastAPI replaced the old <code>on_event("startup")</code> hooks with a single
+    <strong>lifespan context manager</strong> — everything before <code>yield</code> is startup,
+    everything after is shutdown.
+  </p>
+  <div class="card card-accent">
+    <h3>What this project does</h3>
+    <pre>@asynccontextmanager
+async def lifespan(app: FastAPI) -&gt; AsyncGenerator[None, None]:
+    # ── STARTUP ──────────────────────────────────────────
+    setup_langsmith()                     # tracing
+    provider_factory = ProviderFactory()
+    await provider_factory.initialize()   # MUST be awaited (singleton)
+    await provider_factory.primary_provider.health_check()
+
+    yield                                 # app is alive here
+
+    # ── SHUTDOWN ─────────────────────────────────────────
+    provider_factory = None               # release resources</pre>
+    <p>
+      The <code>lifespan=lifespan</code> parameter is passed to <code>FastAPI()</code>.
+      In tests you must mock or await <code>initialize()</code> before importing app modules
+      because <code>config.py</code> validates at import time.
+    </p>
+  </div>
+
+  <div class="card card-warn">
+    <h3>⚠ Gotcha — docs hidden in production</h3>
+    <pre>app = FastAPI(
+    docs_url="/docs" if settings.environment != "production" else None,
+    redoc_url="/redoc" if settings.environment != "production" else None,
+)</pre>
+    <p>Swagger UI is disabled in production by passing <code>None</code>. Classic security practice.</p>
+  </div>
+
+  
+  <h2>2 · CORS Middleware</h2>
+  <p><span class="tag tag-file">main.py</span> Middleware is added via <code>app.add_middleware()</code> — order matters; CORS must be registered early.</p>
+  <div class="card card-accent">
+    <pre>app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,   # ["http://localhost:3000"]
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)</pre>
+    <p><code>settings.cors_origins</code> comes from <code>.env</code> — the Vite dev server on port 3000 is whitelisted. In production you'd tighten <code>allow_methods</code> and <code>allow_headers</code>.</p>
+  </div>
+  <p>
+    <strong>How middleware execution works:</strong> FastAPI wraps every request in middleware layers (LIFO order for response). Each middleware calls <code>await call_next(request)</code> to pass control down.
+    Custom middleware inherits <code>BaseHTTPMiddleware</code>.
+  </p>
+
+  
+  <h2>3 · Exception Handlers</h2>
+  <p><span class="tag tag-file">main.py</span> Two global exception handlers are registered — one for Pydantic validation failures, one catch-all.</p>
+
+  <div class="card card-accent">
+    <h3>Validation Error Handler (422)</h3>
+    <pre>@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError
+) -&gt; JSONResponse:
+    logger.warning(f"Validation error: {exc.errors()}")
+    return JSONResponse(
+        status_code=422,
+        content=ErrorResponse(
+            error="Validation error",
+            detail=str(exc.errors())
+        ).model_dump()          # Pydantic v2 — not .dict()
+    )</pre>
+    <p>Overrides FastAPI's default 422 response so the shape matches the project's <code>ErrorResponse</code> schema.</p>
+  </div>
+
+  <div class="card card-accent">
+    <h3>General Exception Handler (500)</h3>
+    <pre>@app.exception_handler(Exception)
+async def general_exception_handler(
+    request: Request,
+    exc: Exception
+) -&gt; JSONResponse:
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content=ErrorResponse(
+            error="Internal server error",
+            # hide detail in production — security best practice
+            detail=str(exc) if settings.environment != "production" else None
+        ).model_dump()
+    )</pre>
+  </div>
+
+  <div class="card card-purple">
+    <h3>HTTPException — raised inline in route handlers</h3>
+    <pre># 400 Bad Request
+raise HTTPException(status_code=400, detail="Filename is required")
+
+# 404 Not Found
+raise HTTPException(status_code=404, detail=f"Project '{id}' not found")
+
+# 409 Conflict — with a structured detail dict
+raise HTTPException(
+    status_code=status.HTTP_409_CONFLICT,
+    detail={"message": "Already exists", "project_id": pid, "exists": True}
+)
+
+# 503 Service Unavailable
+raise HTTPException(
+    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+    detail="MCP connector unavailable"
+)</pre>
+    <p><strong>Key pattern:</strong> every route does <code>except HTTPException: raise</code> before the generic <code>except Exception</code> block — so intentional HTTP errors are never swallowed by the catch-all.</p>
+  </div>
+
+  
+  <h2>4 · Pydantic v2 Schemas</h2>
+  <p><span class="tag tag-file">models/schemas.py</span> <span class="tag tag-concept">Pydantic v2</span> All request/response shapes are Pydantic <code>BaseModel</code> classes.</p>
+
+  <table>
+    <tr><th>Pattern</th><th>Example from this project</th></tr>
+    <tr>
+      <td><code>Field()</code> metadata</td>
+      <td><code>name: str = Field(min_length=1, max_length=255, description="Project name")</code></td>
+    </tr>
+    <tr>
+      <td>Optional fields</td>
+      <td><code>detail: Optional[str] = Field(default=None)</code></td>
+    </tr>
+    <tr>
+      <td>Enum types</td>
+      <td><code>class ProviderType(str, Enum): OPENAI = "openai"</code></td>
+    </tr>
+    <tr>
+      <td>Swagger examples</td>
+      <td><code>model_config = ConfigDict(json_schema_extra={"example": {...}})</code></td>
+    </tr>
+    <tr>
+      <td>Serialisation</td>
+      <td><code>response.model_dump()</code> — v2 replacement for <code>.dict()</code></td>
+    </tr>
+    <tr>
+      <td>Nested models</td>
+      <td><code>MCPRetrievalRequest</code> has a nested <code>MCPRetrievalProfile</code> field</td>
+    </tr>
+  </table>
+
+  <div class="card card-green">
+    <h3>Why <code>str, Enum</code> base?</h3>
+    <p>Using <code>class ProviderType(str, Enum)</code> makes the enum JSON-serialisable directly. FastAPI serialises it as the string value, not the enum name — critical for proper OpenAPI schema generation.</p>
+  </div>
+
+  
+  <h2>5 · Dependency Injection</h2>
+  <p><span class="tag tag-file">documents.py</span> <span class="tag tag-file">projects.py</span> <span class="tag tag-file">mcp.py</span> <span class="tag tag-concept">Depends()</span></p>
+  <div class="card card-accent">
+    <pre># Define a dependency function
+async def get_qdrant_store() -&gt; QdrantStore:
+    store = QdrantStore()
+    await store.initialize()
+    return store
+
+# Inject it into a route — FastAPI resolves automatically
+@router.post("/upload", response_model=DocumentUploadResponse)
+async def upload_document(
+    file: UploadFile = File(...),
+    project_id: str = Form("default"),
+    qdrant_store: QdrantStore = Depends(get_qdrant_store)   # ← injected
+):
+    ...</pre>
+    <p>
+      <strong>Benefits:</strong> testable (swap the dependency in tests), reusable across routes,
+      async-native. The <code>Depends()</code> function can itself depend on other dependencies — forming a graph.
+    </p>
+  </div>
+  <div class="card card-purple">
+    <h3>Singleton pattern via global + Depends</h3>
+    <pre># mcp.py
+_mcp_connector: MCPConnector | None = None
+
+async def get_mcp_connector() -&gt; MCPConnector:
+    global _mcp_connector
+    if _mcp_connector is None:
+        _mcp_connector = MCPConnector()
+    return _mcp_connector</pre>
+    <p>First call creates the instance; subsequent calls return the cached one. Raises <code>503</code> if creation fails — the dependency itself is responsible for error handling.</p>
+  </div>
+
+  
+  <h2>6 · APIRouter — Modular Routing</h2>
+  <p>Each domain area has its own <code>APIRouter</code> with a common prefix and tag. They are registered in <code>main.py</code>.</p>
+  <div class="card card-accent">
+    <pre># documents.py
+router = APIRouter(prefix="/api/documents", tags=["documents"])
+
+# orchestration.py
+router = APIRouter(prefix="/api/orchestration", tags=["orchestration"])
+
+# mcp.py
+router = APIRouter(prefix="/mcp", tags=["MCP"])
+
+# main.py — register all routers
+app.include_router(mcp_router)
+app.include_router(orchestration_router)
+app.include_router(documents_router)
+app.include_router(projects_router)</pre>
+  </div>
+
+  <h3>Custom responses declared on a route</h3>
+  <pre>@router.get(
+    "/health",
+    response_model=MCPHealthResponse,
+    summary="Check MCP Gateway health",
+    responses={
+        200: {"description": "MCP Gateway is healthy"},
+        503: {"description": "MCP Gateway unavailable", "model": ErrorResponse}
+    }
+)</pre>
+  <p>The <code>responses</code> dict enriches the OpenAPI spec — 503 will show the <code>ErrorResponse</code> schema in Swagger UI.</p>
+
+  
+  <h2>7 · Path Params, Query Params &amp; Form Data</h2>
+  <table>
+    <tr><th>Type</th><th>Declaration</th><th>Example from project</th></tr>
+    <tr>
+      <td>Path param</td>
+      <td>Curly brace in route + matching arg name</td>
+      <td><code>GET /state/{project_id}</code> → <code>async def get_state(project_id: str)</code></td>
+    </tr>
+    <tr>
+      <td>Query param</td>
+      <td>Function arg not in path, no <code>Body()</code></td>
+      <td><code>async def search_documents(project_id: str = "default")</code></td>
+    </tr>
+    <tr>
+      <td>Form field</td>
+      <td><code>Form(...)</code> or <code>Form("default")</code></td>
+      <td><code>project_id: str = Form("default")</code></td>
+    </tr>
+    <tr>
+      <td>File upload</td>
+      <td><code>UploadFile = File(...)</code></td>
+      <td><code>file: UploadFile = File(...)</code></td>
+    </tr>
+  </table>
+
+  
+  <h2>8 · File Upload Pattern</h2>
+  <p><span class="tag tag-file">documents.py</span> A production-grade multi-step file upload endpoint.</p>
+  <div class="card card-accent">
+    <pre>@router.post("/upload", response_model=DocumentUploadResponse)
+async def upload_document(
+    file: UploadFile = File(...),
+    project_id: str = Form("default"),
+    qdrant_store: QdrantStore = Depends(get_qdrant_store)
+):
+    # 1. Validate filename &amp; extension
+    if not ParserFactory.is_supported(file.filename):
+        raise HTTPException(400, detail="Unsupported file type")
+
+    # 2. Write to a temp file (avoid holding bytes in memory)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+        content = await file.read()
+        tmp.write(content)
+        temp_path = tmp.name
+
+    try:
+        parsed = ParserFactory.parse_file(temp_path)
+        chunks  = chunker.chunk_document(parsed)
+        embedded = await embedder.embed_chunks(chunks)
+        await qdrant_store.add_documents(embedded, collection_name)
+    finally:
+        os.unlink(temp_path)    # always clean up, even on error</pre>
+  </div>
+  <p><strong>Lessons:</strong> Always use <code>try/finally</code> to delete temp files. Validate before processing. Re-raise <code>HTTPException</code> before the generic handler.</p>
+
+  
+  <h2>9 · Server-Sent Events (SSE) Streaming</h2>
+  <p><span class="tag tag-file">orchestration.py</span> <span class="tag tag-concept">StreamingResponse</span> Real-time workflow state pushed to the browser without WebSockets.</p>
+  <div class="card card-accent">
+    <pre>@router.get("/stream/{project_id}")
+async def stream_workflow_state(project_id: str):
+    async def event_generator():
+        # SSE format: event name + data line
+        yield f"event: state_update\n"
+        yield f"data: {json.dumps(payload)}\n\n"   # double newline = end of event
+
+        while True:
+            await asyncio.sleep(0.5)               # poll Redis
+            updated_state = await state_manager.get_state(project_id)
+
+            if phase_changed:
+                yield f"event: phase_transition\n"
+                yield f"data: {json.dumps(phase_event)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"   # disable nginx proxy buffering
+        }
+    )</pre>
+  </div>
+  <div class="card card-warn">
+    <h3>Named events vs generic message</h3>
+    <p>This project uses <strong>named events</strong> (<code>state_update</code>, <code>phase_transition</code>, <code>error</code>). The frontend must use <code>eventSource.addEventListener('state_update', ...)</code> — NOT <code>eventSource.onmessage</code>, which only fires for unnamed events.</p>
+  </div>
+
+  
+  <h2>10 · Configuration with Pydantic Settings</h2>
+  <p><span class="tag tag-file">config.py</span> <span class="tag tag-concept">BaseSettings</span> Environment variables are loaded and typed automatically.</p>
+  <div class="card card-accent">
+    <pre>class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore"          # silently ignore unknown env vars
+    )
+    openai_api_key: Optional[str] = Field(default=None)
+    environment: str = Field(default="development")
+    cors_origins: list[str] = Field(default=["http://localhost:3000"])
+
+    @property
+    def default_provider(self) -&gt; str:
+        if self.openai_api_key: return self.primary_provider
+        elif self.gemini_api_key: return "gemini"
+        else: raise ValueError("No LLM provider configured")
+
+settings = Settings()          # module-level singleton
+settings.validate_providers()  # validates at import time</pre>
+  </div>
+  <div class="card card-warn">
+    <h3>⚠ Import-time validation</h3>
+    <p>Because <code>settings.validate_providers()</code> runs at import, tests must set <code>os.environ</code> variables <em>before</em> any <code>from app.X import ...</code> statement. The project does this in <code>backend/tests/conftest.py</code>.</p>
+  </div>
+
+  
+  <h2>11 · Structured Logging</h2>
+  <p><span class="tag tag-file">logging_config.py</span> A custom <code>JSONFormatter</code> emits structured logs that are easy to ingest into observability platforms.</p>
+  <pre>class JSONFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -&gt; str:
+        return json.dumps({
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno,
+            **({"exception": self.formatException(record.exc_info)}
+               if record.exc_info else {})
+        })</pre>
+  <p>Every module uses <code>logger = logging.getLogger(__name__)</code> — giving per-module log namespaces that can be tuned individually (e.g., <code>httpx</code> set to WARNING to suppress noise).</p>
+
+  <div class="divider"></div>
+
+  
+  <h2>12 · Interview Questions &amp; Answers</h2>
+  <p>All answers are grounded in this project's patterns.</p>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q1. What is the difference between <code>@app.on_event("startup")</code> and the lifespan context manager?</p>
+    <div class="qa-a">
+      <code>on_event</code> is deprecated. The <strong>lifespan context manager</strong> (introduced in FastAPI 0.93) handles both startup and shutdown in a single <code>async with</code> block using <code>yield</code>. It's more predictable for resource cleanup and plays well with async context managers. This project uses it in <code>main.py</code> to initialise <code>ProviderFactory</code> and close it on shutdown.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q2. How does <code>Depends()</code> work and what are its advantages?</p>
+    <div class="qa-a">
+      FastAPI calls the dependency function and injects its return value into the route. Dependencies are <strong>cached per request</strong> by default (not per app). They can be async, can raise <code>HTTPException</code>, and can be nested. This project uses <code>Depends(get_qdrant_store)</code> on every document/project route — enabling easy test-time mocking and preventing repeated initialisation code.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q3. How do you handle validation errors differently from general exceptions in FastAPI?</p>
+    <div class="qa-a">
+      Register two separate <code>@app.exception_handler</code> decorators: one for <code>RequestValidationError</code> (422 — Pydantic failures) and one for <code>Exception</code> (500 — unexpected crashes). The project always re-raises <code>HTTPException</code> before the catch-all, so intentional HTTP errors are never accidentally converted to 500s.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q4. What is <code>StreamingResponse</code> and when would you use it?</p>
+    <div class="qa-a">
+      <code>StreamingResponse</code> wraps an async generator and streams data to the client incrementally without buffering the full response. Used here for <strong>Server-Sent Events</strong> at <code>GET /api/orchestration/stream/{project_id}</code> — it pushes real-time workflow state to the React frontend. Set <code>media_type="text/event-stream"</code> and include <code>Cache-Control: no-cache</code> headers.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q5. Why use <code>APIRouter</code> instead of putting all routes on <code>app</code>?</p>
+    <div class="qa-a">
+      <code>APIRouter</code> lets you group related routes into separate files with a shared <code>prefix</code>, <code>tags</code>, and dependencies. You register them all in <code>main.py</code> via <code>app.include_router()</code>. This project has four routers: <code>mcp</code>, <code>orchestration</code>, <code>documents</code>, <code>projects</code> — each in its own file, keeping <code>main.py</code> clean.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q6. How does FastAPI differ from Flask for async code?</p>
+    <div class="qa-a">
+      FastAPI is built on <strong>Starlette</strong> and is natively async — you write <code>async def</code> route handlers that run on uvicorn's event loop. Flask requires extensions (aioflask/Quart) to achieve the same. FastAPI also has first-class Pydantic integration (automatic schema validation + OpenAPI docs), whereas Flask needs Flask-Marshmallow or similar.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q7. What does <code>response_model</code> do and what are its performance implications?</p>
+    <div class="qa-a">
+      <code>response_model</code> tells FastAPI to <strong>serialise and validate the return value</strong> against the specified Pydantic model before sending the response. It strips extra fields, converts types, and generates the OpenAPI response schema. The slight overhead is worth it for correctness. You can add <code>response_model_exclude_none=True</code> to omit <code>None</code> fields from the JSON response.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q8. How do you handle file uploads in FastAPI?</p>
+    <div class="qa-a">
+      Use <code>UploadFile = File(...)</code> combined with form fields via <code>Form()</code>. Call <code>await file.read()</code> to get bytes. Best practice (shown in this project): write to a <code>tempfile.NamedTemporaryFile</code>, process it, then delete in a <code>finally</code> block to avoid leaked temp files.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q9. How do you configure CORS in FastAPI and what does <code>allow_credentials</code> mean?</p>
+    <div class="qa-a">
+      Add <code>CORSMiddleware</code> via <code>app.add_middleware()</code>. <code>allow_credentials=True</code> enables cookies/auth headers in cross-origin requests — this requires <code>allow_origins</code> to be an explicit list (not <code>["*"]</code>). This project whitelists <code>localhost:3000</code> (Vite dev server) and <code>localhost:8000</code>.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q10. How does Pydantic v2 differ from v1 in a FastAPI context?</p>
+    <div class="qa-a">
+      <strong>Key differences:</strong> <code>.model_dump()</code> replaces <code>.dict()</code>; <code>model_config = ConfigDict(...)</code> replaces inner <code>class Config</code>; <code>json_schema_extra</code> replaces <code>schema_extra</code>; validators use <code>@field_validator</code> and <code>@model_validator</code>. Pydantic v2 is also significantly faster due to a Rust core. FastAPI ≥ 0.100 fully supports Pydantic v2.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q11. What is <code>BackgroundTasks</code> and where would you use it?</p>
+    <div class="qa-a">
+      <code>BackgroundTasks</code> lets you schedule work to run after the response is sent. For example, after uploading a document you might return 200 immediately and process embeddings in the background. This project does processing synchronously in the upload handler — a <code>BackgroundTasks</code> refactor would improve perceived latency for large files.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q12. How do you prevent sensitive data leaking in error responses?</p>
+    <div class="qa-a">
+      Check the environment before including detail strings:
+      <code>detail=str(exc) if settings.environment != "production" else None</code>
+      (used in <code>general_exception_handler</code>). In production, log the full traceback server-side and return only a generic message to the client.
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q13. What is the purpose of <code>status</code> from fastapi and when do you use it vs raw integers?</p>
+    <div class="qa-a">
+      <code>from fastapi import status</code> gives named constants like <code>status.HTTP_409_CONFLICT</code>. These are preferred over magic numbers for readability and typo-safety. This project uses both — raw integers for simple cases (<code>status_code=400</code>) and the constants for less-common codes (<code>status.HTTP_503_SERVICE_UNAVAILABLE</code>).
+    </div>
+  </div>
+
+  <div class="card card-accent">
+    <p class="qa-q">Q14. How does <code>pydantic_settings.BaseSettings</code> work?</p>
+    <div class="qa-a">
+      <code>BaseSettings</code> reads field values from environment variables (matching by name, case-insensitive by default). A <code>.env</code> file is loaded via <code>env_file=".env"</code>. Priority: explicit env vars override <code>.env</code> which overrides model defaults. <code>extra="ignore"</code> silently discards unknown vars, preventing crashes when deploying with extra env vars.
+    </div>
+  </div>
+
+  <footer>Made with IBM Bob</footer>
+</div>
+</body>
+</html>
