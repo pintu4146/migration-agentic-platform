@@ -61,40 +61,48 @@ class MigrationState(TypedDict):
 
 ```python
 async def commit_state(project_id, patch, committed_by, reason):
-    # Step 1: Read current state
-    current = await redis.get(f"state:{project_id}")
-    read_version = current['state_version']
-    
-    # Step 2: Validate (no protected fields)
-    validate_patch(patch)  # Throws if patch has reserved keys
-    
-    # Step 3: Check version hasn't changed
-    # THIS IS THE KEY: We detect conflicts here, not during read
-    if current['state_version'] != read_version:
-        raise StateTransactionError("Someone else updated state!")
-    
-    # Step 4: Create new state with incremented version
-    new_state = {
-        **current,
-        **patch,
-        'state_version': read_version + 1,
-        'last_committed_by': committed_by,
-        'state_changelog': [
-            ...current_changelog,
-            {
-                'version': read_version + 1,
-                'patch': patch,
-                'committed_by': committed_by,
-                'reason': reason,
-                'timestamp': now()
-            }
-        ]
-    }
-    
-    # Step 5: Write to Redis (atomic)
-    await redis.set(f"state:{project_id}", new_state)
-    
-    return new_state
+    # ⚠️ asyncio.Lock is single-process only!
+    # For multi-pod/worker deployments, replace with a distributed lock:
+    #   await redis.set(f"lock:{project_id}", "1", nx=True, ex=10)
+    # This prevents a crashed pod from holding the lock indefinitely.
+    async with _get_project_lock(project_id):
+
+        # Step 1: Read current state from Redis
+        current = await redis.get(f"state:{project_id}")
+        read_version = current['state_version']
+
+        # Step 2: Validate (no protected fields allowed in patch)
+        validate_patch(patch)  # Throws if patch has reserved keys
+
+        # Step 3: Re-read from Redis to detect concurrent writes
+        # IMPORTANT: Do NOT compare read_version to itself — that is always equal!
+        # We must re-fetch so any writes that happened since Step 1 are visible.
+        fresh = await redis.get(f"state:{project_id}")
+        if fresh['state_version'] != read_version:
+            raise StateTransactionError("Someone else updated state — please retry!")
+
+        # Step 4: Create new state with incremented version
+        new_state = {
+            **fresh,
+            **patch,
+            'state_version': read_version + 1,
+            'last_committed_by': committed_by,
+            'state_changelog': [
+                *fresh['state_changelog'],
+                {
+                    'version': read_version + 1,
+                    'patch': patch,
+                    'committed_by': committed_by,
+                    'reason': reason,
+                    'timestamp': now()
+                }
+            ]
+        }
+
+        # Step 5: Write to Redis (atomic set)
+        await redis.set(f"state:{project_id}", new_state)
+
+        return new_state
 ```
 
 ### Why This Works
@@ -118,7 +126,12 @@ All agents read v10 simultaneously
 Agent A commits first → v11
 Agent B commits → version error, retry
 Agent C commits → version error, retry
-Only one writes at a time (asyncio.Lock ensures this)
+Only one writes at a time (asyncio.Lock ensures this in a single process)
+
+⚠️ PRODUCTION NOTE: asyncio.Lock is in-process only.
+For multiple pods (Kubernetes), each pod has its own lock → two pods
+can enter the critical section simultaneously. Solution: Redis distributed
+lock (SETNX + EXPIRE) so only one pod across the entire cluster commits.
 ```
 
 ### Performance vs Pessimistic Locking
@@ -641,14 +654,25 @@ async with self._lock:  # Only one project commits at a time
 self._locks = {}  # Map of project_id -> Lock
 
 async def get_lock(project_id):
-    if project_id not in self._locks:
-        self._locks[project_id] = asyncio.Lock()
+    # ⚠️ Race condition: two coroutines can both see the key missing
+    # and both create a new Lock, losing the reference for one of them.
+    # Fix: use dict.setdefault() which is atomic in CPython.
+    self._locks.setdefault(project_id, asyncio.Lock())
     return self._locks[project_id]
 
 async with await self.get_lock(project_id):  # Only this project waits
     await self.commit_state(project_id, patch)
 
 # 100 projects can commit concurrently!
+
+# ⚠️ Memory leak: _locks dict grows forever. Fix: weakref.WeakValueDictionary
+# import weakref
+# self._locks = weakref.WeakValueDictionary()
+# Locks are garbage-collected when no coroutine holds a reference.
+
+# ⚠️ Still single-process! For multi-pod production:
+# Use redis.set(f"lock:{project_id}", "1", nx=True, ex=10)
+# instead of asyncio.Lock.
 ```
 
 ### Bottleneck 3: LLM Latency
@@ -683,6 +707,126 @@ extraction_result, questionnaire_result = await asyncio.gather(
 | **Annotated Reducers** | Transparent merging | Must understand semantics | Concurrent state updates |
 | **SSE Streaming** | Low latency, simple | One-way only | Real-time updates |
 | **Per-project locks** | High concurrency | More complex | 1000+ concurrent items |
+
+---
+
+## ⚠️ POC vs Production: What This Codebase Omits
+
+This section covers production-hardening concerns that the codebase doesn't yet implement but you should be able to discuss in an interview.
+
+### 1. Distributed Tracing & Correlation IDs
+
+```python
+# ❌ POC: logs have no context
+logger.error("Extraction failed")
+
+# ✅ Production: every log line carries trace/request context
+import uuid
+from contextvars import ContextVar
+
+request_id: ContextVar[str] = ContextVar("request_id", default="")
+
+@app.middleware("http")
+async def correlation_id_middleware(request: Request, call_next):
+    rid = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request_id.set(rid)
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = rid
+    return response
+
+# In any logger call:
+logger.error("Extraction failed", extra={
+    "request_id": request_id.get(),
+    "project_id": project_id,
+    "phase": current_phase,
+})
+```
+
+### 2. Structured JSON Logging
+
+```python
+# ❌ POC: plain text log
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+
+# ✅ Production: JSON logs that feed into Elasticsearch / Datadog
+import structlog
+log = structlog.get_logger()
+
+# Every log line is a JSON object:
+# {"event": "extraction_failed", "project_id": "proj-123", "trace_id": "...", "level": "error"}
+log.error("extraction_failed", project_id=project_id, trace_id=trace_id, error=str(e))
+```
+
+### 3. Graceful Shutdown with Drain
+
+```python
+# ❌ POC: SIGTERM kills the process mid-request
+
+# ✅ Production: drain in-flight requests before exit
+import signal
+import asyncio
+
+shutdown_event = asyncio.Event()
+
+@app.on_event("shutdown")
+async def graceful_shutdown():
+    """Wait for in-flight requests to complete (up to 30s)"""
+    shutdown_event.set()
+    # uvicorn handles SIGTERM → calls shutdown lifespan
+    # Set --timeout-graceful-shutdown 30 in uvicorn config
+    await asyncio.sleep(0)  # yield to allow requests to complete
+```
+
+### 4. Connection Pooling
+
+```python
+# ❌ POC: new client created per dependency call
+async def get_redis():
+    return aioredis.from_url("redis://localhost:6379")
+
+# ✅ Production: single pooled client reused across all requests
+_redis_pool: Optional[aioredis.Redis] = None
+
+@asynccontextmanager
+async def lifespan(app):
+    global _redis_pool
+    _redis_pool = aioredis.from_url(
+        "redis://localhost:6379",
+        max_connections=20,      # Pool size
+        decode_responses=True,
+    )
+    yield
+    await _redis_pool.aclose()
+
+async def get_redis() -> aioredis.Redis:
+    return _redis_pool  # Already pooled — no reconnect overhead
+```
+
+### 5. Circuit Breaker Across Pods
+
+```python
+# ❌ POC: asyncio.Lock is single-process — each pod has its own lock
+# Two pods can simultaneously think they hold the exclusive lock.
+
+# ✅ Production: distribute lock state via Redis SETNX
+async def acquire_distributed_lock(redis, project_id: str, ttl: int = 10) -> bool:
+    """Returns True if lock acquired, False if already held by another pod"""
+    key = f"lock:{project_id}"
+    acquired = await redis.set(key, "1", nx=True, ex=ttl)
+    return bool(acquired)
+
+async def release_distributed_lock(redis, project_id: str):
+    await redis.delete(f"lock:{project_id}")
+
+# Always wrap with try/finally so lock is released even on crash
+acquired = await acquire_distributed_lock(redis, project_id)
+if not acquired:
+    raise StateTransactionError("Could not acquire lock — retry")
+try:
+    await commit(project_id, patch)
+finally:
+    await release_distributed_lock(redis, project_id)
+```
 
 ---
 

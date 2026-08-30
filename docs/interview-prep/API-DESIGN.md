@@ -377,7 +377,7 @@ headers = {
 }
 ```
 
-**Adding JWT Auth to FastAPI (scalable pattern):**
+**Adding JWT Auth to FastAPI (production-hardened pattern):**
 
 ```python
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -385,16 +385,34 @@ import jwt
 
 security = HTTPBearer()
 
+# Production constants — load from env, never hardcode
+SECRET_KEY = os.environ["JWT_SECRET_KEY"]
+EXPECTED_AUDIENCE = os.environ["JWT_AUDIENCE"]    # e.g. "migration-copilot-api"
+EXPECTED_ISSUER = os.environ["JWT_ISSUER"]        # e.g. "https://auth.example.com"
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ) -> dict:
     """Dependency: validate JWT and return user claims"""
     token = credentials.credentials
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        return payload  # {user_id, role, exp}
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=["HS256"],
+            # ⚠️ Production MUST validate audience and issuer:
+            # Without these, any token signed with the same key from a
+            # *different* service is accepted — a critical security gap.
+            audience=EXPECTED_AUDIENCE,   # "aud" claim in JWT
+            issuer=EXPECTED_ISSUER,       # "iss" claim in JWT
+        )
+        return payload  # {user_id, role, exp, aud, iss}
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidAudienceError:
+        raise HTTPException(status_code=401, detail="Invalid token audience")
+    except jwt.InvalidIssuerError:
+        raise HTTPException(status_code=401, detail="Invalid token issuer")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -409,6 +427,12 @@ async def get_project(
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     ...
 ```
+
+> **Why `audience` and `issuer` matter:** A JWT is just a signed JSON blob.
+> Without `audience` validation, a token issued for your *staging* environment
+> is accepted in *production*. Without `issuer` validation, any token signed
+> with the same key from a *sibling service* is accepted. Both checks are a
+> single-line addition but close a class of privilege-escalation attacks.
 
 ### RBAC (Role-Based Access Control)
 
@@ -1181,6 +1205,84 @@ api/
 - Router inclusion: [`backend/app/main.py` (L103-106)](../../backend/app/main.py)
 - Router exports: [`backend/app/api/__init__.py`](../../backend/app/api/__init__.py)
 
+### Liveness vs Readiness Health Checks
+
+> **Interview question:** "What is the difference between `/health/live` and `/health/ready`?"
+
+In Kubernetes (and any multi-replica deployment), there are **three distinct health signals**, each serving a different purpose:
+
+| Endpoint | Kubernetes probe | Failing means | Action |
+|----------|-----------------|---------------|--------|
+| `GET /health/live` | Liveness | App is deadlocked / unresponsive | **Restart the pod** |
+| `GET /health/ready` | Readiness | App is alive but not ready (warming up, overloaded) | **Stop routing traffic** — don't restart |
+| `GET /health/startup` | Startup | App hasn't finished booting yet | **Wait longer** before liveness kicks in |
+
+```python
+# ✅ Production: split into three distinct endpoints
+
+@app.get("/health/live")
+async def liveness():
+    """
+    Ultra-fast check — only proves the process is not deadlocked.
+    Should NEVER call external services (Redis, Qdrant, LLM providers).
+    If this endpoint is slow or failing, k8s restarts the pod.
+    """
+    return {"status": "ok"}
+
+@app.get("/health/ready")
+async def readiness():
+    """
+    Deep check — proves the app can serve real traffic.
+    Call all downstream dependencies. If any is down, return 503
+    so the load balancer stops routing to this instance.
+    """
+    checks = {}
+    try:
+        await redis_client.ping()
+        checks["redis"] = "ok"
+    except Exception as e:
+        checks["redis"] = f"error: {e}"
+
+    try:
+        await qdrant_store.client.get_collections()
+        checks["qdrant"] = "ok"
+    except Exception as e:
+        checks["qdrant"] = f"error: {e}"
+
+    all_ok = all(v == "ok" for v in checks.values())
+    return JSONResponse(
+        status_code=200 if all_ok else 503,
+        content={"status": "ready" if all_ok else "degraded", "checks": checks}
+    )
+
+@app.get("/health/startup")
+async def startup():
+    """
+    Only used during initial startup phase.
+    Allows slow initialisation (model loading, index warming) without
+    triggering liveness restarts prematurely.
+    """
+    initialized = provider_factory is not None and state_manager is not None
+    return JSONResponse(
+        status_code=200 if initialized else 503,
+        content={"initialized": initialized}
+    )
+```
+
+**Common mistake:** A single `/health` endpoint that calls external services.
+If Redis is slow, the liveness probe fails → Kubernetes restarts a healthy pod → cascading restart loop.
+Always keep liveness **instant and I/O-free**.
+
+```
+# ❌ Anti-pattern: one /health endpoint that does deep checks
+@app.get("/health")
+async def health():
+    await redis.ping()   # If Redis is slow → 503 → k8s restarts → stampede!
+    return {"status": "ok"}
+
+# ✅ Correct: separate liveness (no I/O) from readiness (deep check)
+```
+
 ---
 
 ## 16. Testing APIs {#testing}
@@ -1365,6 +1467,28 @@ Redis sorted set sliding window:
 - [ ] CORS locked to known origins (not `*`)
 - [ ] Error details hidden in production (`NODE_ENV != development`)
 - [ ] All endpoints have integration tests
+- [ ] JWT `audience` and `issuer` validated (not just signature)
+- [ ] Separate `/health/live` and `/health/ready` endpoints
+- [ ] Request correlation IDs (`X-Request-ID`) generated and logged
+
+---
+
+## ⚠️ POC vs Production: API Layer Gaps
+
+| Concern | POC (this codebase) | Production add-on |
+|---------|--------------------|--------------------|
+| **JWT validation** | Signature only (`decode(token, key)`) | + `audience` and `issuer` claims validated |
+| **Health checks** | Single `/health` | `/health/live` (no I/O), `/health/ready` (Redis + Qdrant ping) |
+| **Request tracing** | No `X-Request-ID` | Middleware injects / preserves `X-Request-ID` on every request and response |
+| **Structured logging** | Plain text | JSON logs carrying `request_id`, `project_id`, `user_id` on every line |
+| **Error codes** | `HTTPException(detail=str(e))` | Structured `{"error": {"code": "...", "message": "...", "request_id": "..."}}` |
+| **Connection pooling** | New Redis/Qdrant client per call | Single pooled client from lifespan, shared across all requests |
+| **Graceful shutdown** | SIGTERM kills in-flight requests | `--timeout-graceful-shutdown 30` on uvicorn; lifespan drains before exit |
+| **Rate limit granularity** | None | Per-user per-endpoint Redis sliding window with `X-RateLimit-*` headers |
+| **CORS** | `allow_origins=["*"]` | Explicit origin allowlist from `settings.allowed_origins` |
+
+**Sample interview answer:**
+> "The current `/health` endpoint is a monolith — it calls Redis and Qdrant on every probe. In production that means a slow Redis response makes Kubernetes think the pod is unhealthy and restarts it, causing a cascade. I'd split it into `/health/live` which is instant and I/O-free, and `/health/ready` which does the full dependency check but is wired to the readiness probe, not the liveness probe. That way Kubernetes stops routing traffic to a degraded pod without restarting a healthy one."
 
 ---
 

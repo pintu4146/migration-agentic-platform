@@ -138,16 +138,30 @@ async def acquire_lock(project_id):
 ```python
 # Instead of writing on every update
 # Collect patches and commit every N seconds
-pending_patches = {}
+import asyncio
+
+# ⚠️ Plain dict is NOT safe under concurrent coroutines without a lock.
+# Two coroutines calling queue_patch() simultaneously can race on
+# the dict.update() call, silently dropping one caller's data.
+# Fix: guard all mutations with an asyncio.Lock.
+_patches_lock = asyncio.Lock()
+pending_patches: dict = {}
 
 async def queue_patch(project_id, patch):
-    if project_id not in pending_patches:
-        pending_patches[project_id] = {}
-    # Merge patches
-    pending_patches[project_id].update(patch)
+    async with _patches_lock:  # Serialize access
+        if project_id not in pending_patches:
+            pending_patches[project_id] = {}
+        # Merge patches (later keys overwrite earlier ones)
+        pending_patches[project_id].update(patch)
 
 async def flush_patches():
-    for project_id, patch in pending_patches.items():
+    async with _patches_lock:
+        # Drain the buffer atomically
+        to_flush, pending_patches.clear() = dict(pending_patches), None
+        pending_patches.update({})  # reset
+
+    # Commit outside lock so we don't block new patches during I/O
+    for project_id, patch in to_flush.items():
         await state_manager.commit_state(project_id, patch)
 ```
 
@@ -226,13 +240,24 @@ class ProviderFactory:
     async def handle_failure(self, provider):
         self.failure_count += 1
         if self.failure_count >= 3:
-            provider.status = ProviderStatus.UNAVAILABLE
+            # ✅ CORRECT: status is tracked on the factory, not on the provider instance
+            if provider == self.primary_provider:
+                self.primary_status = ProviderStatus.UNAVAILABLE
+            else:
+                self.fallback_status = ProviderStatus.UNAVAILABLE
         else:
-            provider.status = ProviderStatus.DEGRADED
-    
+            if provider == self.primary_provider:
+                self.primary_status = ProviderStatus.DEGRADED
+            else:
+                self.fallback_status = ProviderStatus.DEGRADED
+
     async def handle_success(self, provider):
         self.failure_count = 0
-        provider.status = ProviderStatus.HEALTHY
+        # ✅ CORRECT: reset factory-level status
+        if provider == self.primary_provider:
+            self.primary_status = ProviderStatus.HEALTHY
+        else:
+            self.fallback_status = ProviderStatus.HEALTHY
 ```
 
 **4. Failure Modes**
@@ -603,12 +628,18 @@ async def get_extracted_facts(project_id):
 
 # Cache ML model embeddings
 # Expensive to compute, static per document
-embeddings_cache = {}
+# ⚠️ NEVER use a plain module-level dict as a cache in production:
+#   embeddings_cache = {}   ← WRONG: unbounded memory leak!
+# As more documents are processed, the dict grows forever and OOMs the pod.
+# Fix: use a bounded cache with eviction (LRU) and/or expiry (TTL).
+from cachetools import TTLCache
+embeddings_cache = TTLCache(maxsize=1000, ttl=3600)  # max 1000 entries, expire in 1h
+
 def get_embeddings(doc_id):
     if doc_id in embeddings_cache:
         return embeddings_cache[doc_id]
     embeddings = compute_expensive_embeddings(doc_id)
-    embeddings_cache[doc_id] = embeddings
+    embeddings_cache[doc_id] = embeddings  # Auto-evicted when full or expired
     return embeddings
 ```
 
@@ -758,6 +789,28 @@ async def commit_state(self, project_id, patch, idempotency_key):
 
 ---
 
+## ⚠️ POC vs Production: What Interviewers Want to Hear
+
+When describing a system design, explicitly calling out what a POC omits signals production maturity. Use this table:
+
+| Concern | POC answer | Production answer |
+|---------|-----------|-------------------|
+| **Distributed coordination** | `asyncio.Lock` (in-process) | Redis `SETNX + EXPIRE` lock shared across all pods |
+| **Observability** | `print()` / basic logging | Structured JSON logs with `trace_id`, `project_id`, `phase` propagated on every line |
+| **Request tracing** | No | `X-Request-ID` header injected at entry, carried through all downstream calls |
+| **Shutdown** | Kill immediately | Drain in-flight requests (30s timeout), then graceful exit |
+| **Health checks** | Single `/health` endpoint | Separate `/health/live` (no I/O — just proves process is alive) and `/health/ready` (full dependency check — Redis, Qdrant, LLM) |
+| **Connection management** | New client each call | Connection pool (`max_connections=20`) initialized at startup, shared |
+| **Cache safety** | `{}` dict — unbounded | `TTLCache(maxsize=1000, ttl=3600)` — bounded with eviction |
+| **JWT security** | `decode(token, key)` only | + `audience` and `issuer` validation |
+| **Circuit breaker scope** | In-memory per pod | Redis-backed shared state so all pods see the same provider status |
+| **Retry correlation** | Random retries | Idempotency keys so retries are de-duplicated by the server |
+
+**Sample interview answer:**
+> "The POC uses `asyncio.Lock` for concurrency control. For production I'd replace that with a Redis distributed lock using `SETNX + EXPIRE`. I'd also add structured JSON logging with a correlation ID propagated through every log line, separate liveness and readiness endpoints so Kubernetes doesn't restart healthy pods when Redis is slow, and a bounded `TTLCache` instead of a plain dict to prevent memory leaks under load."
+
+---
+
 ## Resources
 
 - LangGraph Documentation: https://langchain-ai.github.io/langgraph/
@@ -765,6 +818,8 @@ async def commit_state(self, project_id, patch, idempotency_key):
 - FastAPI: https://fastapi.tiangolo.com/
 - Redis Transactions: https://redis.io/docs/interact/transactions/
 - System Design Primer: https://github.com/donnemartin/system-design-primer
+- `cachetools` (TTLCache): https://cachetools.readthedocs.io/
+- Redis Distributed Locks: https://redis.io/docs/manual/patterns/distributed-locks/
 
 ---
 

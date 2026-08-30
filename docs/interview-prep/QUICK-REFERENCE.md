@@ -12,32 +12,48 @@
 
 class StateManager:
     async def commit_state(self, project_id, patch):
+        # NOTE: asyncio.Lock is single-process only.
+        # In a multi-pod/multi-worker deployment you need a
+        # distributed lock (e.g. Redis SETNX with expiry).
+        # See "Production Note" below.
         async with self._lock:
+            # Step 1: Read current state
             current = await self.redis.get(f"state:{project_id}")
             read_version = current['state_version']
-            
-            # KEY: Check version hasn't changed
-            if current['state_version'] != read_version:
-                raise StateTransactionError("Version mismatch")
-            
-            # Write with new version
+
+            # Step 2: Validate patch (reject protected fields)
+            self._validate_patch(patch)
+
+            # Step 3: Re-read version from store to detect concurrent writes
+            # (Do NOT compare read_version to itself — they are always equal.
+            #  Re-fetch from Redis so another writer's update is visible.)
+            fresh = await self.redis.get(f"state:{project_id}")
+            if fresh['state_version'] != read_version:
+                raise StateTransactionError("Version mismatch — retry")
+
+            # Step 4: Build and atomically write new state
             new_state = {
-                **current,
+                **fresh,
                 **patch,
                 'state_version': read_version + 1,
-                'state_changelog': [..., new_entry]
+                'state_changelog': [*fresh['state_changelog'], new_entry]
             }
-            
             await self.redis.set(f"state:{project_id}", new_state)
             return new_state
 
-# Conflict resolution: Agent retries with new version
+# ⚠️ Production Note — distributed lock for multi-pod deployments:
+# async def acquire_lock(redis, project_id, ttl=10):
+#     key = f"lock:{project_id}"
+#     return await redis.set(key, "1", nx=True, ex=ttl)  # SETNX + EXPIRY
+# Prevents one process from holding the lock forever if it crashes.
+
+# Conflict resolution: Agent retries with refreshed state
 try:
     await manager.commit_state(project_id, my_patch)
 except StateTransactionError:
-    # Retry with updated state
+    # Retry: re-read latest state, recompute patch if needed
     current = await manager.get_state(project_id)
-    await manager.commit_state(project_id, {**my_patch, ...updated_data...})
+    await manager.commit_state(project_id, recompute_patch(current))
 ```
 
 **📂 See actual code:**
@@ -45,7 +61,7 @@ except StateTransactionError:
 - State manager: [`backend/app/orchestration/state_manager.py` (L120-250)](../../backend/app/orchestration/state_manager.py)
 - Exception types: [`backend/app/orchestration/state_manager.py` (L27-35)](../../backend/app/orchestration/state_manager.py)
 
-**Interview tip:** "Optimistic locking works well when reads >> writes. If conflict rate is high, switch to pessimistic."
+**Interview tip:** "Optimistic locking: detect conflict at write time, not read time. `asyncio.Lock` is single-process — add Redis SETNX for multi-pod."
 
 ---
 
@@ -76,11 +92,19 @@ class ProviderFactory:
             else:
                 self.fallback_status = ProviderStatus.UNAVAILABLE
         else:
-            provider.status = ProviderStatus.DEGRADED
-    
+            # CORRECT: status lives on the factory, not the provider instance
+            if provider == self.primary_provider:
+                self.primary_status = ProviderStatus.DEGRADED
+            else:
+                self.fallback_status = ProviderStatus.DEGRADED
+
     async def handle_success(self, provider):
         self.failure_count = 0  # Reset on success
-        provider.status = ProviderStatus.HEALTHY
+        # Reset the factory-level status, not provider instance attribute
+        if provider == self.primary_provider:
+            self.primary_status = ProviderStatus.HEALTHY
+        else:
+            self.fallback_status = ProviderStatus.HEALTHY
 
 # State transitions:
 # HEALTHY ─(failure)─> DEGRADED ─(max_failures=3)─> UNAVAILABLE
@@ -466,12 +490,35 @@ eventSource.addEventListener('phase_transition', (e) => {
 
 1. ❌ Holding lock during entire agent processing → Use optimistic lock
 2. ❌ No version checking → Lost updates from concurrent agents
-3. ❌ Retrying permanent errors (401, 404) → Check error type first
-4. ❌ Global lock for all projects → Use per-project locks
-5. ❌ No circuit breaker → Cascading failures when provider down
-6. ❌ Returning "human_review" node → Infinite recursion, return "END"
-7. ❌ No idempotency → Retries create duplicate records
-8. ❌ Polling instead of SSE → Wastes bandwidth, slow updates
+3. ❌ Comparing `read_version` to itself → Always equal; re-read from Redis first
+4. ❌ Using `asyncio.Lock` in multi-pod deployment → Distribute via Redis SETNX
+5. ❌ Setting `provider.status` (instance attr) → Status lives on `ProviderFactory`
+6. ❌ Module-level `embeddings_cache = {}` → Unbounded memory leak; use `TTLCache`
+7. ❌ Retrying permanent errors (401, 404) → Check error type first
+8. ❌ Global lock for all projects → Use per-project locks; use `setdefault` to avoid race
+9. ❌ No circuit breaker → Cascading failures when provider down
+10. ❌ Returning "human_review" node → Infinite recursion, return "END"
+11. ❌ No idempotency → Retries create duplicate records
+12. ❌ Polling instead of SSE → Wastes bandwidth, slow updates
+
+---
+
+## ⚠️ POC vs Production: What This Codebase Omits
+
+| Concern | POC (this codebase) | Production add-on |
+|---------|--------------------|--------------------|
+| **Distributed lock** | `asyncio.Lock` (single-process) | Redis `SETNX` + `EXPIRE` across pods |
+| **Per-project lock** | `dict[project_id]` | `WeakValueDictionary` to prevent unbounded growth |
+| **Embeddings cache** | Plain `dict` | `cachetools.TTLCache(maxsize=N, ttl=3600)` |
+| **Correlation IDs** | None | `X-Request-ID` header propagated through all log lines |
+| **Structured logging** | `logging.getLogger` | JSON logs with `trace_id`, `project_id`, `phase` fields |
+| **Graceful shutdown** | SIGTERM closes immediately | Drain in-flight requests before exit; drain timeout ~30s |
+| **Health checks** | Single `/health` | Separate `/health/live` (no I/O) and `/health/ready` (deep check) |
+| **Connection pooling** | New connection per request | Pooled Redis/Qdrant clients at startup (reuse across requests) |
+| **JWT validation** | `jwt.decode(token, key)` | + `audience`, `issuer` claims validated |
+| **Circuit breaker scope** | In-memory (single process) | Shared state in Redis so all pods see the same status |
+
+**Key interview talking point:** "In production I'd add correlation IDs and structured logs so every log line carries `trace_id` and `project_id`. This turns 'something failed in extraction' into 'extraction failed for project X in trace Y at timestamp Z'."
 
 ---
 
